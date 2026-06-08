@@ -244,7 +244,7 @@ else:
                     purchases_df.to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
                     st.success("✅ تم تسجيل الوارد وإضافة الفاتورة بنجاح!")
 
-    # --- 6. صفحة فاتورة بيع جديدة (مع إضافة هاتف العميل وتصميم الـ A5) ---
+    # --- 6. صفحة فاتورة بيع جديدة ---
     elif choice == "💰 فاتورة بيع جديدة":
         st.header("💰 إنشاء فاتورة مبيعات جديدة - معرض الكبير")
         if inv_df.empty: st.warning("المخزن فارغ تماماً.")
@@ -301,12 +301,10 @@ else:
                     
                     st.success("✅ تم حفظ الفاتورة بنجاح في السجلات وجاهزة للطباعة!")
                     
-                    # استدعاء دالة الطباعة وتصميم الـ A5
                     invoice_html = generate_a5_invoice(inv_id, today_str, c_name, c_phone, c_address, sale_type, selected_item, qty, item_row['سعر البيع'], discount, final_total, st.session_state.user)
                     st.markdown(invoice_html, unsafe_allow_html=True)
-                    st.info("💡 اضغط كليك يمين بالماوس ثم اختر Print (أو اختصار Ctrl + P) لطباعة الفواتير ورقياً وحفظها.")
 
-    # --- 7. 🔍 صفحة البحث وإعادة طباعة الفواتير السابقة بأي وقت ---
+    # --- 7. صفحة البحث وإعادة طباعة الفواتير السابقة ---
     elif choice == "🔍 بحث وإعادة طباعة الفواتير":
         st.header("🔍 محرك البحث عن الفواتير القديمة وإعادة طباعتها بحجم A5")
         search_query = st.text_input("ابحث عن الفاتورة بـ (اسم العميل أو رقم الفاتورة الكامل)").strip()
@@ -321,12 +319,11 @@ else:
                     with st.expander(f"📄 فاتورة رقم {row['رقم الفاتورة']} - العميل: {row['اسم العميل']} ({row['التاريخ']})"):
                         st.write(row.to_dict())
                         if st.button(f"🖨️ عرض الفاتورة الثلاثية لإعادة الطباعة لـ {row['رقم الفاتورة']}", key=f"print_{row['رقم الفاتورة']}"):
-                            # جلب السعر الافتراضي الأصلي من المخزن إن وُجد لحساب السعر الفردي
                             original_price = row['إجمالي البيع'] / row['الكمية'] if row['الكمية'] > 0 else 0
                             
                             inv_html = generate_a5_invoice(
                                 row['رقم الفاتورة'], row['التاريخ'], row['اسم العميل'], 
-                                row.get('هاتف العميل', 'غير مسجل'), row.get('العنوان', 'غير محدد'), 
+                                row.get('هاتف العميل', 'غير مسجل'), row.get('العنوان', 'غير حدد'), 
                                 row['نوع البيع'], row['الصنف'], row['الكمية'], 
                                 round(original_price, 2), row['الخصم %'], row['إجمالي البيع'], row['المسؤول']
                             )
@@ -394,7 +391,7 @@ else:
         st.dataframe(u_df, use_container_width=True)
         
         st.subheader("🔄 تعديل وتحديث بيانات حساب الحالي")
-        selected_user_to_edit = st.selectbox("اختر الحساب المراد تعديل بياناته"، u_df['username'].unique())
+        selected_user_to_edit = st.selectbox("اختر الحساب المراد تعديل بياناته", u_df['username'].unique()) # <--- هنا كان الخطأ وتم حله بالفاصلة الصحيحة
         
         c_edit1, c_edit2, c_edit3 = st.columns(3)
         new_username = c_edit1.text_input("اسم المستخدم الجديد أو الحالي", value=selected_user_to_edit)
@@ -442,7 +439,6 @@ else:
         if st.button("حفظ بياناتي الجديدة"):
             if edit_user and edit_pass:
                 user_idx = u_df[u_df['username'] == st.session_state.user].index[0]
-                # التأكد من عدم تكرار الاسم إن تم تغييره
                 if edit_user != st.session_state.user and edit_user in u_df['username'].values:
                     st.error("اسم المستخدم الجديد مأخوذ من قبل موظف آخر!")
                 else:
