@@ -86,7 +86,7 @@ else:
     att_df = pd.read_csv(ATTENDANCE_FILE)
     contacts_df = pd.read_csv(CONTACTS_FILE, dtype=str)
 
-    # --- 1. صفحة تكويد الأصناف (للمدير فقط) ---
+    # --- 1. صفحة تكويد الأصناف (لمدير فقط) ---
     if choice == "🗂️ تكويد الأصناف":
         st.header("🗂️ تكويد وتسجيل أصناف جديدة")
         st.dataframe(inv_df, use_container_width=True)
@@ -122,7 +122,6 @@ else:
                 st.dataframe(excel_df)
                 
                 if st.button("تأكيد ودمج الملف في رصيد أول المدة"):
-                    # دمج شيت الاكسيل مع المخزن الحالي وتحديث الكميات
                     combined_df = pd.concat([inv_df, excel_df]).drop_duplicates(subset=['كود الصنف'], keep='last')
                     combined_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
                     st.success("✅ تم رفع وحفظ رصيد أول المدة بنجاح وتحديث المخزن!")
@@ -181,7 +180,7 @@ else:
                 purchases_df.to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
                 st.success("تم تسجيل الوارد للمخزن!")
 
-    # --- 6. صفحة فاتورة بيع جديدة (مع الخصم والنسخ الثلاثية للطباعة) ---
+    # --- 6. صفحة فاتورة بيع جديدة ---
     elif choice == "💰 فاتورة بيع جديدة":
         st.header("💰 إنشاء فاتورة مبيعات جديدة - معرض الكبير")
         if inv_df.empty: st.warning("المخزن فارغ.")
@@ -204,7 +203,6 @@ else:
             selected_item = c5.selectbox("اختر المنتج للبيع", inv_df['اسم الصنف'].unique())
             qty = c6.number_input("الكمية المطلوبة", min_value=1, step=1)
             
-            # تفعيل صلاحية الخصم للمدير والمشرف فقط وحجبها عن الموظف
             discount = 0.0
             if st.session_state.role in ["مدير", "مشرف"]:
                 discount = c7.number_input("نسبة الخصم الممنوحة (%)", min_value=0.0, max_value=100.0, step=0.5)
@@ -212,11 +210,11 @@ else:
                 c7.write("🔒 *صلاحية الخصم مغلقة للموظفين*")
                 
             item_row = inv_df[inv_df['اسم الصنف'] == selected_item].iloc[0]
-            subtotal = item_row['sعر البيع'] * qty
+            subtotal = item_row['سعر البيع'] * qty   # <--- هنا تم تعديل الحرف وحل المشكلة تماماً 👍
             discount_amount = subtotal * (discount / 100)
             final_total = subtotal - discount_amount
             
-            st.warning(f" المتوفر بالمخزن: {item_row['الكمية']} قطعة | السعر الأساسي: {subtotal} | الخصم: {discount_amount} | الصافي المطلوب: {final_total}")
+            st.warning(f"المتوفر بالمخزن: {item_row['الكمية']} قطعة | السعر الأساسي: {subtotal} | الخصم: {discount_amount} | الصافي المطلوب: {final_total}")
             
             if st.button("إصدار وطباعة الفاتورة الثلاثية", use_container_width=True):
                 idx = inv_df[inv_df['اسم الصنف'] == selected_item].index[0]
@@ -225,19 +223,16 @@ else:
                 elif not c_name:
                     st.error("❌ يرجى كتابة اسم العميل أولاً.")
                 else:
-                    # خصم الكمية من المخزن
                     inv_df.at[idx, 'الكمية'] -= qty
                     inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
                     
                     inv_id = "INV-" + str(int(datetime.now().timestamp()))
-                    # حفظ البيع
                     new_s = pd.DataFrame([{"رقم الفاتورة": inv_id, "التاريخ": datetime.now().strftime("%Y-%m-%d"), "اسم العميل": c_name, "العنوان": c_address, "نوع البيع": sale_type, "الصنف": selected_item, "الكمية": qty, "الخصم %": discount, "إجمالي البيع": final_total, "المسؤول": st.session_state.user}])
                     sales_df = pd.concat([sales_df, new_s], ignore_index=True)
                     sales_df.to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
                     
                     st.success("✅ تم حفظ الفاتورة بنجاح في السجلات!")
                     
-                    # --- بناء كود التصميم للنسخ الثلاثية الفاتورة المخصصة للطباعة ---
                     copies = ["نسخة العميل", "نسخة الإدارة المالية", "نسخة مسؤول المخازن"]
                     html_invoice = ""
                     
@@ -277,7 +272,6 @@ else:
                         </div>
                         """
                     st.markdown(html_invoice, unsafe_allow_html=True)
-                    st.info("💡 لطباعة الـ 3 نسخ معاً: اضغط كليك يمين في أي مكان بالصفحة ثم اختر Print (أو Ctrl + P) من لوحة المفاتيح.")
 
     # --- 7. صفحة التقارير ---
     elif choice == "📊 تقارير البيع والشراء":
