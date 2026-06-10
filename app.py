@@ -1,276 +1,1068 @@
+elkabeer_system/
+│
+├── app.py
+├── database.db
+├── assets/
+│   └── logo.png
+│
+├── pages/
+│   ├── inventory.py
+│   ├── sales.py
+│   ├── installments.py
+│   ├── purchases.py
+│   ├── customers.py
+│   ├── reports.py
+│   └── users.py
+│
+├── pdf/
+│   └── invoices/
+│
+└── backups/
+
+    CREATE TABLE inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    barcode TEXT UNIQUE,
+    item_name TEXT,
+    purchase_price REAL,
+    sale_price REAL,
+    quantity INTEGER
+);
+
+CREATE TABLE customers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    phone TEXT,
+    national_id TEXT,
+    address TEXT,
+    guarantor_name TEXT,
+    guarantor_phone TEXT
+);
+
+CREATE TABLE sales (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_no TEXT,
+    customer_id INTEGER,
+    total_amount REAL,
+    discount REAL,
+    net_amount REAL,
+    sale_date TEXT
+);
+
+CREATE TABLE installments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER,
+    invoice_no TEXT,
+    item_name TEXT,
+    total_price REAL,
+    down_payment REAL,
+    remaining_amount REAL,
+    months INTEGER,
+    monthly_installment REAL,
+    start_date TEXT,
+    status TEXT
+);
+
+CREATE TABLE installment_details (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    installment_id INTEGER,
+    due_date TEXT,
+    amount REAL,
+    paid INTEGER DEFAULT 0,
+    payment_date TEXT
+);
+
+CREATE TABLE suppliers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    phone TEXT,
+    address TEXT
+);
+
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT,
+    role TEXT
+);
+
+# database.py
+
+import sqlite3
+
+DB_NAME = "database.db"
+
+def create_database():
+conn = sqlite3.connect(DB_NAME)
+cursor = conn.cursor()
+
+```
+# جدول الأصناف
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    barcode TEXT UNIQUE,
+    item_name TEXT NOT NULL,
+    purchase_price REAL DEFAULT 0,
+    sale_price REAL DEFAULT 0,
+    quantity INTEGER DEFAULT 0
+)
+""")
+
+# جدول العملاء
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS customers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT,
+    national_id TEXT,
+    address TEXT,
+    guarantor_name TEXT,
+    guarantor_phone TEXT
+)
+""")
+
+# جدول الموردين
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS suppliers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT,
+    address TEXT
+)
+""")
+
+# جدول المستخدمين
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
+    password TEXT,
+    role TEXT
+)
+""")
+
+# جدول المبيعات
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS sales (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_no TEXT,
+    customer_id INTEGER,
+    total_amount REAL,
+    discount REAL,
+    net_amount REAL,
+    sale_date TEXT
+)
+""")
+
+# جدول التقسيط
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS installments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER,
+    invoice_no TEXT,
+    item_name TEXT,
+    total_price REAL,
+    down_payment REAL,
+    remaining_amount REAL,
+    months INTEGER,
+    monthly_installment REAL,
+    start_date TEXT,
+    status TEXT DEFAULT 'نشط'
+)
+""")
+
+# تفاصيل الأقساط
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS installment_details (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    installment_id INTEGER,
+    due_date TEXT,
+    amount REAL,
+    paid INTEGER DEFAULT 0,
+    payment_date TEXT
+)
+""")
+
+# إدخال المستخدمين الافتراضيين
+cursor.execute("""
+INSERT OR IGNORE INTO users
+(username,password,role)
+VALUES
+('superadmin','789','مدير عام')
+""")
+
+cursor.execute("""
+INSERT OR IGNORE INTO users
+(username,password,role)
+VALUES
+('admin','123','مدير')
+""")
+
+cursor.execute("""
+INSERT OR IGNORE INTO users
+(username,password,role)
+VALUES
+('sharaf','456','مشرف')
+""")
+
+conn.commit()
+conn.close()
+```
+
+if **name** == "**main**":
+create_database()
+print("تم إنشاء قاعدة البيانات بنجاح")
+
 import streamlit as st
-import pandas as pd
-import os
-from datetime import datetime
+import sqlite3
 
-# إعدادات الصفحة والشكل العام
-st.set_page_config(page_title="نظام معرض الكبير لإدارة المخازن", layout="wide")
+# إعداد الصفحة
 
-# أسماء ملفات البيانات
-INVENTORY_FILE = "inventory_data.csv"
-USERS_FILE = "users_data.csv"
-SALES_FILE = "sales_data.csv"
-PURCHASES_FILE = "purchases_data.csv"
-EXPENSES_FILE = "expenses_data.csv"
-ATTENDANCE_FILE = "attendance_data.csv"
-CONTACTS_FILE = "contacts_data.csv"
-RATINGS_FILE = "ratings_data.csv"  # ملف التقييمات الجديد
+st.set_page_config(
+page_title="نظام معرض الكبير",
+page_icon="🏪",
+layout="wide"
+)
 
-# دالة تهيئة الملفات للتأكد من وجود الأعمدة الجديدة والحسابات الافتراضية
-def init_files():
-    if not os.path.exists(USERS_FILE):
-        pd.DataFrame([
-            {"username": "superadmin", "password": "789", "role": "مدير عام"},
-            {"username": "admin", "password": "123", "role": "مدير"},
-            {"username": "sharaf", "password": "456", "role": "مشرف"},
-            {"username": "user1", "password": "111", "role": "موظف"}
-        ]).to_csv(USERS_FILE, index=False, encoding='utf-8-sig')
-        
-    if not os.path.exists(INVENTORY_FILE):
-        pd.DataFrame(columns=["كود الصنف", "اسم الصنف", "الكمية", "سعر الشراء", "سعر البيع"]).to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
-    if not os.path.exists(SALES_FILE):
-        pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "اسم العميل", "هاتف العميل", "العنوان", "نوع البيع", "الصنف", "الكمية", "الخصم %", "إجمالي البيع", "المسؤول"]).to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
-    if not os.path.exists(PURCHASES_FILE):
-        pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "المورد", "هاتف المورد", "الصنف", "الكمية", "إجمالي الشراء", "المسؤول"]).to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
-    if not os.path.exists(EXPENSES_FILE):
-        pd.DataFrame(columns=["التاريخ", "البيان", "المبلغ", "المسؤول"]).to_csv(EXPENSES_FILE, index=False, encoding='utf-8-sig')
-    if not os.path.exists(ATTENDANCE_FILE):
-        pd.DataFrame(columns=["الموظف", "التاريخ", "وقت الحضور", "وقت الانصراف"]).to_csv(ATTENDANCE_FILE, index=False, encoding='utf-8-sig')
-    if not os.path.exists(CONTACTS_FILE):
-        pd.DataFrame(columns=["النوع", "الاسم", "الهاتف", "العنوان"]).to_csv(CONTACTS_FILE, index=False, encoding='utf-8-sig')
-    if not os.path.exists(RATINGS_FILE):
-        pd.DataFrame(columns=["التاريخ", "المسؤول المراد تقييمه", "التقييم بالنجوم", "ملاحظات المدير العام"]).to_csv(RATINGS_FILE, index=False, encoding='utf-8-sig')
+DB_NAME = "database.db"
 
-init_files()
+# الاتصال بقاعدة البيانات
 
-# إدارة الجلسة والمستخدمين
-if 'auth' not in st.session_state: st.session_state.auth = False
-if 'user' not in st.session_state: st.session_state.user = ""
-if 'role' not in st.session_state: st.session_state.role = "موظف"
+def get_connection():
+return sqlite3.connect(DB_NAME)
 
-# دالة برمجية مبسطة لتحويل الأرقام إلى مبالغ مكتوبة باللغة العربية (تفقيط)
-def number_to_arabic_words(amount):
-    try:
-        val = int(float(amount))
-        if val == 0: return "صفر جنيهاً"
-        
-        ones = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة"]
-        teens = ["عشر", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"]
-        tens = ["", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"]
-        hundreds = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"]
-        thousands = ["", "ألف", "ألفان", "ثلاثة آلاف", "أربعة آلاف", "خمسة آلاف", "ستة آلاف", "سبعة آلاف", "ثمانية آلاف", "تسعة آلاف"]
-        
-        words = []
-        
-        # آلاف
-        th = val // 1000
-        if th > 0 and th <= 9: words.append(thousands[th])
-        val %= 1000
-        
-        # مئات
-        h = val // 100
-        if h > 0: words.append(hundreds[h])
-        val %= 100
-        
-        # آحاد وعشرات
-        if val > 0:
-            if val <= 10:
-                words.append(ones[val])
-            elif val < 20:
-                words.append(teens[val-10])
-            else:
-                o = val % 10
-                t = val // 10
-                if o > 0:
-                    words.append(f"{ones[o]} و {tens[t]}")
-                else:
-                    words.append(tens[t])
-                    
-        result = " و ".join([w for w in words if w != ""])
-        return f"فقط {result} جنيهاً مصرياً لا غير"
-    except:
-        return "إجمالي السعر الموضح أعلاه"
+# التحقق من المستخدم
 
-# دالة لتوليد كود طباعة الفواتير بنمط A5 المحسن مع الحفظ التلقائي كـ PDF
-def generate_a5_invoice(inv_id, date, c_name, c_phone, c_address, sale_type, selected_item, qty, item_price, discount, final_total, user):
-    copies = ["نسخة العميل", "نسخة الإدارة المالية", "نسخة مسؤول المخازن"]
-    html_invoice = ""
-    arabic_text_amount = number_to_arabic_words(final_total)
-    
-    for copy in copies:
-        is_warehouse = (copy == "نسخة مسؤول المخازن")
-        
-        # إعدادات العرض لنسخة المخزن (إخفاء المبالغ)
-        phone_section = ""
-        if not is_warehouse:
-            phone_section = """<div style="margin-top: 5px; font-size: 13px; font-weight: bold; text-align: center; color: #111;">📞 هاتف استعلام المعرض: 0128958413</div>"""
-            
-        html_invoice += f"""
-        <div style="width: 148mm; min-height: 210mm; border: 2px solid #000; padding: 15px; margin: 0 auto 40px auto; direction: rtl; text-align: right; font-family: 'Cairo', sans-serif; background: #fff; color: #000; box-sizing: border-box; page-break-after: always; position: relative;">
-            <div style="text-align: center;">
-                <span style="border: 1px solid #000; padding: 3px 10px; font-weight: bold; font-size: 14px;">{copy}</span>
-                <h1 style="margin: 5px 0 2px 0; font-size: 24px;">🏢 معرض الكبير</h1>
-                <p style="font-size: 11px; margin: 0;">أبو حماد - قرية العراقي - بجوار مدرسة الشهيد صلاح فتحي</p>
-            </div>
-            <hr style="border: 1px solid #000; margin: 8px 0;">
-            <table style="width: 100%; font-size: 13px; line-height: 1.6;">
-                <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ:</b> {date}</td></tr>
-                <tr><td><b>اسم العميل:</b> {c_name}</td><td><b>هاتف العميل:</b> {c_phone if c_phone else 'غير مسجل'}</td></tr>
-                <tr><td><b>العنوان:</b> {c_address if c_address else 'غير محدد'}</td><td><b>طبيعة الدفع:</b> {sale_type}</td></tr>
-                <tr><td colspan="2"><b>المسؤول الصادر:</b> {user}</td></tr>
-            </table>
-            
-            <table style="width: 100%; border-collapse: collapse; margin-top: 15px; border: 1px solid black; font-size: 13px; text-align: center;">
-                <tr style="background: #eee;">
-                    <th style="border: 1px solid black; padding: 6px;">الصنف والبيان</th>
-                    <th style="border: 1px solid black; padding: 6px;">الكمية المطلوبة</th>
-                    {" " if is_warehouse else f'<th style="border: 1px solid black; padding: 6px;">سعر المفرد</th>'}
-                    {" " if is_warehouse else f'<th style="border: 1px solid black; padding: 6px;">الخصم</th>'}
-                    {" " if is_warehouse else f'<th style="border: 1px solid black; padding: 6px;">الصافي الإجمالي</th>'}
-                </tr>
-                <tr>
-                    <td style="border: 1px solid black; padding: 6px; font-weight: bold;">{selected_item}</td>
-                    <td style="border: 1px solid black; padding: 6px; font-size: 16px; font-weight: bold;">{qty} قطعة</td>
-                    {" " if is_warehouse else f'<td style="border: 1px solid black; padding: 6px;">{item_price}</td>'}
-                    {" " if is_warehouse else f'<td style="border: 1px solid black; padding: 6px;">{discount}%</td>'}
-                    {" " if is_warehouse else f'<td style="border: 1px solid black; padding: 6px; font-weight: bold; font-size:15px;">{final_total}</td>'}
-                </tr>
-            </table>
-            
-            {" " if is_warehouse else f'<div style="margin-top: 10px; font-size: 13px; font-weight: bold; background: #f9f9f9; padding: 5px; border-right: 4px solid #000;">✍️ المبلغ الإجمالي كتابةً: <span style="color:#c00;">{arabic_text_amount}</span></div>'}
-            
-            <div style="margin-top: 25px; font-size: 11px; font-weight: bold; text-align: center; border: 1px dashed #000; padding: 8px; background: #fafafa;">
-                ⚠️ تنبيه: مدة الاستبدال والارجاع 15 يوم لاغير من تاريخ الفاتورة بشرط سلامة البضاعة تماماً.
-            </div>
-            {phone_section}
-        </div>
-        """
-        
-    # إضافة سكريبت جافا سكريبت يقوم بتحويل الشاشة بالكامل للطباعة وحفظها كـ PDF تلقائياً فوراً
-    html_invoice += """
-    <script>
-        setTimeout(function(){
-            window.print();
-        }, 500);
-    </script>
-    """
-    return html_invoice
+def login(username, password):
+conn = get_connection()
+cursor = conn.cursor()
 
-# --- واجهة تسجيل الدخول ---
-if not st.session_state.auth:
-    st.title("🔐 نظام معرض الكبير - تسجيل الدخول")
-    user_input = st.text_input("اسم المستخدم").strip()
-    pw_input = st.text_input("كلمة المرور", type="password").strip()
-    
-    if st.button("دخول للنظام", use_container_width=True):
-        u_df = pd.read_csv(USERS_FILE, dtype=str)
-        match = u_df[(u_df['username'] == user_input) & (u_df['password'] == pw_input)]
-        if not match.empty:
-            st.session_state.auth = True
-            st.session_state.user = user_input
-            st.session_state.role = match.iloc[0]['role']
-            st.success(f"مرحباً بك يا {user_input} ({st.session_state.role})")
-            st.rerun()
-        else:
-            st.error("بيانات الدخول خاطئة.")
-else:
-    # --- بناء القائمة الجانبية والصلاحيات حسب الرتبة الجديدة ---
-    st.sidebar.title(f"👤 {st.session_state.user}")
-    st.sidebar.write(f"الرتبة: **{st.session_state.role}**")
-    
-    if st.session_state.role == "مدير عام":
-        menu = ["🗂️ تكويد الأصناف", "📈 رصيد أول المدة Excel", "📦 حالة المخزن", "🤝 العملاء والموردين", "🛍️ فاتورة شراء جديدة", "💰 فاتورة بيع جديدة", "🔍 بحث وإعادة طباعة الفواتير", "📊 تقارير البيع والشراء والأرباح والتقييم", "💸 المصاريف", "⏱️ الحضور والانصراف للعاملين", "👥 إدارة الصلاحيات وتعديل الحسابات"]
-    elif st.session_state.role == "مدير":
-        menu = ["🗂️ تكويد الأصناف", "📈 رصيد أول المدة Excel", "📦 حالة المخزن", "🤝 العملاء والموردين", "🛍️ فاتورة شراء جديدة", "💰 فاتورة بيع جديدة", "🔍 بحث وإعادة طباعة الفواتير", "📊 تقارير البيع والشراء والأرباح والتقييم", "💸 المصاريف", "⏱️ الحضور والانصراف للعاملين"]
-    elif st.session_state.role == "مشرف":
-        menu = ["📦 حالة المخزن", "🛍️ فاتورة شراء جديدة", "💰 فاتورة بيع جديدة", "🔍 بحث وإعادة طباعة الفواتير", "⏱️ الحضور والانصراف للعاملين", "⚙️ إعدادات حسابي"]
-    else: # موظف عادي
-        menu = ["📦 حالة المخزن", "💰 فاتورة بيع جديدة", "🔍 بحث وإعادة طباعة الفواتير", "⏱️ الحضور والانصراف للعاملين", "⚙️ إعدادات حسابي"]
-        
-    choice = st.sidebar.selectbox("الانتقال إلى", menu)
-    
-    if st.sidebar.button("تسجيل الخروج"):
-        st.session_state.auth = False
+```
+cursor.execute(
+    "SELECT username, role FROM users WHERE username=? AND password=?",
+    (username, password)
+)
+
+user = cursor.fetchone()
+conn.close()
+
+return user
+```
+
+# Session State
+
+if "logged_in" not in st.session_state:
+st.session_state.logged_in = False
+
+if "username" not in st.session_state:
+st.session_state.username = ""
+
+if "role" not in st.session_state:
+st.session_state.role = ""
+
+# شاشة تسجيل الدخول
+
+if not st.session_state.logged_in:
+
+```
+st.title("🏪 نظام معرض الكبير")
+st.subheader("تسجيل الدخول")
+
+username = st.text_input("اسم المستخدم")
+password = st.text_input("كلمة المرور", type="password")
+
+if st.button("دخول", use_container_width=True):
+
+    user = login(username, password)
+
+    if user:
+        st.session_state.logged_in = True
+        st.session_state.username = user[0]
+        st.session_state.role = user[1]
+
+        st.success("تم تسجيل الدخول بنجاح")
         st.rerun()
 
-    # قراءة البيانات بشكل فوري ومحدث
-    inv_df = pd.read_csv(INVENTORY_FILE, dtype={"كود الصنف": str})
-    sales_df = pd.read_csv(SALES_FILE, dtype={"هاتف العميل": str, "رقم الفاتورة": str})
-    purchases_df = pd.read_csv(PURCHASES_FILE, dtype={"هاتف المورد": str, "رقم الفاتورة": str})
-    exp_df = pd.read_csv(EXPENSES_FILE)
-    att_df = pd.read_csv(ATTENDANCE_FILE)
-    contacts_df = pd.read_csv(CONTACTS_FILE, dtype=str)
-    ratings_df = pd.read_csv(RATINGS_FILE, dtype=str)
+    else:
+        st.error("اسم المستخدم أو كلمة المرور غير صحيحة")
+```
 
-    # --- 1. صفحة تكويد الأصناف ---
-    if choice == "🗂️ تكويد الأصناف":
-        st.header("🗂️ تكويد وتسجيل أصناف جديدة")
-        st.dataframe(inv_df, use_container_width=True)
-        st.subheader("➕ إضافة صنف جديد")
-        c1, c2, c3, c4 = st.columns(4)
-        iid = c1.text_input("كود الصنف (الباركود / ID)")
-        iname = c2.text_input("اسم المنتج")
-        ipurchase = c3.number_input("سعر الشراء الافتراضي", min_value=0.0)
-        isale = c4.number_input("سعر البيع الافتراضي", min_value=0.0)
-        
-        if st.button("تكويد وحفظ"):
-            if iid and iname:
-                if iid in inv_df["كود الصنف"].values: st.warning("⚠️ هذا الكود مسجل مسبقاً!")
-                else:
-                    new_item = pd.DataFrame([{"كود الصنف": iid, "اسم الصنف": iname, "الكمية": 0, "سعر الشراء": ipurchase, "سعر البيع": isale}])
-                    inv_df = pd.concat([inv_df, new_item], ignore_index=True)
-                    inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
-                    st.success("✅ تم التكويد بنجاح!")
-                    st.rerun()
+# بعد تسجيل الدخول
 
-    # --- 2. صفحة رصيد أول المدة ---
-    elif choice == "📈 رصيد أول المدة Excel":
-        st.header("📈 رفع بضائع ورصيد أول المدة عبر ملف Excel")
-        uploaded_file = st.file_uploader("اختر شيت الاكسل الخاص بالبضائع", type=["xlsx", "xls"])
-        if uploaded_file is not None:
-            try:
-                excel_df = pd.read_excel(uploaded_file, dtype={"كود الصنف": str})
-                st.dataframe(excel_df)
-                if st.button("تأكيد ودمج الملف في رصيد أول المدة"):
-                    combined_df = pd.concat([inv_df, excel_df]).drop_duplicates(subset=['كود الصنف'], keep='last')
-                    combined_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
-                    st.success("✅ تم رفع وتحديث المخزن بنجاح!")
-                    st.rerun()
-            except Exception as e: st.error(f"❌ خطأ بالملف: {e}")
+else:
 
-    # --- 3. صفحة حالة المخزن ---
-    elif choice == "📦 حالة المخزن":
-        st.header("📦 جرد بضائع المخزن الحالية")
-        st.dataframe(inv_df, use_container_width=True)
+```
+st.sidebar.title("القائمة الرئيسية")
 
-    # --- 4. صفحة العملاء والموردين ---
-    elif choice == "🤝 العملاء والموردين":
-        st.header("🤝 إدارة بيانات العملاء والموردين")
-        st.dataframe(contacts_df, use_container_width=True)
-        c1, c2, c3, c4 = st.columns(4)
-        ctype = c1.selectbox("النوع", ["عميل", "مورد"])
-        cname = c2.text_input("الاسم")
-        cphone = c3.text_input("الهاتف")
-        caddress = c4.text_input("العنوان")
-        if st.button("حفظ الجهة"):
-            if cname:
-                new_c = pd.DataFrame([{"النوع": ctype, "الاسم": cname, "الهاتف": cphone, "العنوان": caddress}])
-                contacts_df = pd.concat([contacts_df, new_c], ignore_index=True)
-                contacts_df.to_csv(CONTACTS_FILE, index=False, encoding='utf-8-sig')
-                st.success("تم الحفظ!")
-                st.rerun()
+st.sidebar.write(
+    f"👤 المستخدم: {st.session_state.username}"
+)
 
-    # --- 5. صفحة المشتريات ---
-    elif choice == "🛍️ فاتورة شراء جديدة":
-        st.header("🛍️ تسجيل فاتورة مشتريات جديدة للوارد")
-        if inv_df.empty: st.warning("قم بتكويد بضائع أولاً.")
-        else:
-            m_list = contacts_df[contacts_df['النوع'] == 'مورد']['الاسم'].unique()
-            c1, c2, c3, c4 = st.columns(4)
-            vendor_type = c1.radio("نوع المورد", ["مورد جديد / نقدي سريع", "مسجل مسبقاً"])
-            if vendor_type == "مسجل مسبقاً" and len(m_list) > 0:
-                vendor = c2.selectbox("اختر المورد", m_list)
-                v_phone = contacts_df[contacts_df['الاسم'] == vendor]['الهاتف'].values[0]
-            else:
-                vendor = c2.text_input("اسم الشركة / المورد")
-                v_phone = c3.text_input("رقم هاتف المورد")
+st.sidebar.write(
+    f"🔑 الصلاحية: {st.session_state.role}"
+)
+
+# قوائم حسب الصلاحية
+if st.session_state.role == "مدير عام":
+
+    menu = [
+        "الرئيسية",
+        "المخزن",
+        "العملاء",
+        "الموردون",
+        "المبيعات",
+        "التقسيط",
+        "التقارير",
+        "المستخدمون"
+    ]
+
+elif st.session_state.role == "مدير":
+
+    menu = [
+        "الرئيسية",
+        "المخزن",
+        "العملاء",
+        "المبيعات",
+        "التقسيط",
+        "التقارير"
+    ]
+
+else:
+
+    menu = [
+        "الرئيسية",
+        "المخزن",
+        "المبيعات"
+    ]
+
+page = st.sidebar.radio("اختر الصفحة", menu)
+
+if st.sidebar.button("تسجيل الخروج"):
+
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.session_state.role = ""
+
+    st.rerun()
+
+# محتوى الصفحات
+if page == "الرئيسية":
+
+    st.title("🏪 معرض الكبير")
+
+    st.info(
+        "معرض الكبير للأجهزة الكهربائية وجهاز العروسة وكل ما يلزم البيت الحديث"
+    )
+
+    st.write("مرحباً بك داخل النظام")
+
+elif page == "المخزن":
+
+    st.header("📦 إدارة المخزن")
+
+    st.write("سيتم ربط صفحة الأصناف هنا")
+
+elif page == "العملاء":
+
+    st.header("👥 العملاء")
+
+elif page == "الموردون":
+
+    st.header("🚚 الموردون")
+
+elif page == "المبيعات":
+
+    st.header("💰 المبيعات")
+
+elif page == "التقسيط":
+
+    st.header("📅 التقسيط")
+
+elif page == "التقارير":
+
+    st.header("📊 التقارير")
+
+elif page == "المستخدمون":
+
+    st.header("🔐 إدارة المستخدمين")
+```
+
+import streamlit as st
+import sqlite3
+import pandas as pd
+
+DB_NAME = "database.db"
+
+def get_connection():
+return sqlite3.connect(DB_NAME)
+
+st.title("📦 إدارة المخزن")
+
+# إضافة صنف جديد
+
+with st.expander("➕ إضافة صنف جديد"):
+
+```
+barcode = st.text_input("باركود الصنف")
+item_name = st.text_input("اسم الصنف")
+purchase_price = st.number_input("سعر الشراء", min_value=0.0)
+sale_price = st.number_input("سعر البيع", min_value=0.0)
+quantity = st.number_input("الكمية", min_value=0)
+
+if st.button("حفظ الصنف"):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO inventory
+        (barcode,item_name,purchase_price,sale_price,quantity)
+        VALUES (?,?,?,?,?)
+    """,
+    (
+        barcode,
+        item_name,
+        purchase_price,
+        sale_price,
+        quantity
+    ))
+
+    conn.commit()
+    conn.close()
+
+    st.success("تم حفظ الصنف بنجاح")
+```
+
+# البحث
+
+st.subheader("🔍 البحث عن صنف")
+
+search = st.text_input("ابحث بالاسم أو الباركود")
+
+conn = get_connection()
+
+query = """
+SELECT *
+FROM inventory
+"""
+
+df = pd.read_sql(query, conn)
+
+if search:
+
+```
+df = df[
+    df["item_name"].astype(str).str.contains(search, case=False)
+    |
+    df["barcode"].astype(str).str.contains(search, case=False)
+]
+```
+
+st.dataframe(df, use_container_width=True)
+
+# إجمالي قيمة المخزون
+
+if not df.empty:
+
+```
+total_inventory_value = (
+    df["purchase_price"] * df["quantity"]
+).sum()
+
+st.metric(
+    "إجمالي قيمة المخزون",
+    f"{total_inventory_value:,.2f} جنيه"
+)
+```
+
+# الأصناف قليلة الكمية
+
+st.subheader("⚠️ أصناف تحتاج إعادة طلب")
+
+low_stock = df[df["quantity"] <= 5]
+
+if not low_stock.empty:
+
+```
+st.warning(
+    f"يوجد {len(low_stock)} صنف يحتاج إعادة تموين"
+)
+
+st.dataframe(
+    low_stock,
+    use_container_width=True
+)
+```
+
+# تعديل صنف
+
+st.subheader("✏️ تعديل صنف")
+
+if not df.empty:
+
+```
+selected_id = st.selectbox(
+    "اختر الصنف",
+    df["id"]
+)
+
+selected_row = df[df["id"] == selected_id].iloc[0]
+
+new_name = st.text_input(
+    "اسم الصنف الجديد",
+    selected_row["item_name"]
+)
+
+new_purchase = st.number_input(
+    "سعر الشراء الجديد",
+    value=float(selected_row["purchase_price"])
+)
+
+new_sale = st.number_input(
+    "سعر البيع الجديد",
+    value=float(selected_row["sale_price"])
+)
+
+new_qty = st.number_input(
+    "الكمية الجديدة",
+    value=int(selected_row["quantity"])
+)
+
+if st.button("تحديث الصنف"):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    UPDATE inventory
+    SET item_name=?,
+        purchase_price=?,
+        sale_price=?,
+        quantity=?
+    WHERE id=?
+    """,
+    (
+        new_name,
+        new_purchase,
+        new_sale,
+        new_qty,
+        selected_id
+    ))
+
+    conn.commit()
+    conn.close()
+
+    st.success("تم التحديث بنجاح")
+    st.rerun()
+```
+
+# حذف صنف
+
+st.subheader("🗑️ حذف صنف")
+
+if not df.empty:
+
+```
+delete_id = st.selectbox(
+    "اختر الصنف للحذف",
+    df["id"],
+    key="delete_item"
+)
+
+if st.button("حذف الصنف"):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "DELETE FROM inventory WHERE id=?",
+        (delete_id,)
+    )
+
+    conn.commit()
+    conn.close()
+
+    st.success("تم حذف الصنف")
+    st.rerun()
+```
+
+conn.close()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS installment_payments (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+installment_detail_id INTEGER,
+amount_paid REAL,
+payment_date TEXT,
+collected_by TEXT
+)
+""")
+
+import streamlit as st
+import sqlite3
+import pandas as pd
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
+DB_NAME = "database.db"
+
+def get_connection():
+return sqlite3.connect(DB_NAME)
+
+st.title("📅 إدارة التقسيط")
+
+conn = get_connection()
+
+customers = pd.read_sql(
+"SELECT * FROM customers",
+conn
+)
+
+inventory = pd.read_sql(
+"SELECT * FROM inventory",
+conn
+)
+
+tab1, tab2, tab3 = st.tabs([
+"➕ عقد تقسيط جديد",
+"💵 سداد قسط",
+"📋 متابعة العقود"
+])
+
+# ==================================
+
+# عقد جديد
+
+# ==================================
+
+with tab1:
+
+```
+st.subheader("إنشاء عقد تقسيط جديد")
+
+customer_name = st.text_input("اسم العميل")
+
+phone = st.text_input("رقم الهاتف")
+
+national_id = st.text_input("الرقم القومي")
+
+address = st.text_area("العنوان")
+
+guarantor = st.text_input("اسم الضامن")
+
+guarantor_phone = st.text_input("هاتف الضامن")
+
+item = st.selectbox(
+    "الصنف",
+    inventory["item_name"]
+)
+
+item_row = inventory[
+    inventory["item_name"] == item
+].iloc[0]
+
+item_price = float(item_row["sale_price"])
+
+st.info(f"سعر البيع: {item_price:,.2f} جنيه")
+
+down_payment = st.number_input(
+    "المقدم",
+    min_value=0.0
+)
+
+months = st.number_input(
+    "عدد الأشهر",
+    min_value=1,
+    max_value=60,
+    value=12
+)
+
+remaining = item_price - down_payment
+
+monthly_installment = remaining / months
+
+st.success(
+    f"القسط الشهري = {monthly_installment:,.2f} جنيه"
+)
+
+if st.button("حفظ عقد التقسيط"):
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT INTO customers
+    (name,phone,national_id,address,
+     guarantor_name,guarantor_phone)
+    VALUES (?,?,?,?,?,?)
+    """,
+    (
+        customer_name,
+        phone,
+        national_id,
+        address,
+        guarantor,
+        guarantor_phone
+    ))
+
+    customer_id = cursor.lastrowid
+
+    invoice_no = (
+        "INS-" +
+        datetime.now().strftime("%Y%m%d%H%M%S")
+    )
+
+    cursor.execute("""
+    INSERT INTO installments
+    (
+        customer_id,
+        invoice_no,
+        item_name,
+        total_price,
+        down_payment,
+        remaining_amount,
+        months,
+        monthly_installment,
+        start_date,
+        status
+    )
+    VALUES (?,?,?,?,?,?,?,?,?,?)
+    """,
+    (
+        customer_id,
+        invoice_no,
+        item,
+        item_price,
+        down_payment,
+        remaining,
+        months,
+        monthly_installment,
+        datetime.now().strftime("%Y-%m-%d"),
+        "نشط"
+    ))
+
+    installment_id = cursor.lastrowid
+
+    for i in range(months):
+
+        due_date = (
+            datetime.now()
+            + relativedelta(months=i+1)
+        ).strftime("%Y-%m-%d")
+
+        cursor.execute("""
+        INSERT INTO installment_details
+        (
+            installment_id,
+            due_date,
+            amount
+        )
+        VALUES (?,?,?)
+        """,
+        (
+            installment_id,
+            due_date,
+            monthly_installment
+        ))
+
+    conn.commit()
+
+    st.success("تم إنشاء عقد التقسيط")
+```
+
+# ==================================
+
+# سداد قسط
+
+# ==================================
+
+with tab2:
+
+```
+contracts = pd.read_sql("""
+SELECT
+installments.id,
+customers.name,
+installments.invoice_no
+FROM installments
+INNER JOIN customers
+ON customers.id =
+installments.customer_id
+""", conn)
+
+if not contracts.empty:
+
+    contract = st.selectbox(
+        "اختر العقد",
+        contracts["invoice_no"]
+    )
+
+    contract_id = contracts[
+        contracts["invoice_no"] == contract
+    ]["id"].iloc[0]
+
+    installments_due = pd.read_sql(f"""
+    SELECT *
+    FROM installment_details
+    WHERE installment_id={contract_id}
+    AND paid=0
+    """, conn)
+
+    st.dataframe(installments_due)
+```
+
+# ==================================
+
+# متابعة العقود
+
+# ==================================
+
+with tab3:
+
+```
+contracts_report = pd.read_sql("""
+SELECT
+installments.invoice_no,
+customers.name,
+installments.item_name,
+installments.remaining_amount,
+installments.monthly_installment,
+installments.status
+FROM installments
+INNER JOIN customers
+ON customers.id =
+installments.customer_id
+""", conn)
+
+st.dataframe(
+    contracts_report,
+    use_container_width=True
+)
+```
+
+conn.close()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS invoices (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+invoice_no TEXT UNIQUE,
+customer_name TEXT,
+customer_phone TEXT,
+total_amount REAL,
+discount REAL,
+net_amount REAL,
+profit REAL,
+sale_type TEXT,
+created_by TEXT,
+sale_date TEXT
+)
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS invoice_items (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+invoice_no TEXT,
+barcode TEXT,
+item_name TEXT,
+quantity INTEGER,
+purchase_price REAL,
+sale_price REAL,
+total REAL
+)
+""")
+
+ALTER TABLE inventory
+ADD COLUMN brand TEXT;
+
+ALTER TABLE inventory
+ADD COLUMN model TEXT;
+
+ALTER TABLE inventory
+ADD COLUMN serial_number TEXT;
+
+ALTER TABLE inventory
+ADD COLUMN warranty_months INTEGER;
+
+import streamlit as st
+import sqlite3
+import pandas as pd
+from datetime import datetime
+
+DB_NAME = "database.db"
+
+def get_connection():
+return sqlite3.connect(DB_NAME)
+
+st.title("📊 لوحة تحكم معرض الكبير")
+
+conn = get_connection()
+
+# ======================
+
+# مبيعات اليوم
+
+# ======================
+
+today = datetime.now().strftime("%Y-%m-%d")
+
+sales_today = pd.read_sql(f"""
+SELECT IFNULL(SUM(net_amount),0) total
+FROM invoices
+WHERE sale_date LIKE '{today}%'
+""", conn)
+
+today_sales = float(sales_today.iloc[0]["total"])
+
+# ======================
+
+# أرباح اليوم
+
+# ======================
+
+profit_today = pd.read_sql(f"""
+SELECT IFNULL(SUM(profit),0) total
+FROM invoices
+WHERE sale_date LIKE '{today}%'
+""", conn)
+
+today_profit = float(profit_today.iloc[0]["total"])
+
+# ======================
+
+# عدد الفواتير
+
+# ======================
+
+invoice_count = pd.read_sql(f"""
+SELECT COUNT(*) total
+FROM invoices
+WHERE sale_date LIKE '{today}%'
+""", conn)
+
+today_invoices = int(invoice_count.iloc[0]["total"])
+
+# ======================
+
+# إجمالي قيمة المخزون
+
+# ======================
+
+inventory = pd.read_sql("""
+SELECT *
+FROM inventory
+""", conn)
+
+inventory_value = (
+inventory["purchase_price"] *
+inventory["quantity"]
+).sum()
+
+# ======================
+
+# بطاقات المؤشرات
+
+# ======================
+
+c1,c2,c3,c4 = st.columns(4)
+
+c1.metric(
+"💰 مبيعات اليوم",
+f"{today_sales:,.0f} ج"
+)
+
+c2.metric(
+"📈 أرباح اليوم",
+f"{today_profit:,.0f} ج"
+)
+
+c3.metric(
+"🧾 عدد الفواتير",
+today_invoices
+)
+
+c4.metric(
+"📦 قيمة المخزون",
+f"{inventory_value:,.0f} ج"
+)
+
+# ======================
+
+# الأصناف قليلة الكمية
+
+# ======================
+
+st.subheader("⚠️ أصناف تحتاج إعادة طلب")
+
+low_stock = inventory[
+inventory["quantity"] <= 5
+]
+
+if not low_stock.empty:
+st.dataframe(
+low_stock[
+[
+"barcode",
+"item_name",
+"quantity"
+]
+],
+use_container_width=True
+)
+else:
+st.success("لا توجد أصناف ناقصة")
+
+# ======================
+
+# أفضل المنتجات مبيعاً
+
+# ======================
+
+st.subheader("🏆 أفضل المنتجات مبيعاً")
+
+best_products = pd.read_sql("""
+SELECT
+item_name,
+SUM(quantity) total_qty
+FROM invoice_items
+GROUP BY item_name
+ORDER BY total_qty DESC
+LIMIT 10
+""", conn)
+
+if not best_products.empty:
+st.dataframe(
+best_products,
+use_container_width=True
+)
+
+# ======================
+
+# الأقساط المتأخرة
+
+# ======================
+
+st.subheader("🚨 الأقساط المتأخرة")
+
+late_installments = pd.read_sql("""
+SELECT
+customers.name,
+installment_details.due_date,
+installment_details.amount
+FROM installment_details
+INNER JOIN installments
+ON installments.id =
+installment_details.installment_id
+
+INNER JOIN customers
+ON customers.id =
+installments.customer_id
+
+WHERE paid = 0
+""", conn)
+
+if not late_installments.empty:
+st.dataframe(
+late_installments,
+use_container_width=True
+)
+
+conn.close()
