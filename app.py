@@ -14,8 +14,9 @@ PURCHASES_FILE = "purchases_data.csv"
 EXPENSES_FILE = "expenses_data.csv"
 ATTENDANCE_FILE = "attendance_data.csv"
 CONTACTS_FILE = "contacts_data.csv"
+PERMISSIONS_FILE = "permissions_config.csv"  # ملف التحكم في إظهار وإخفاء الصفحات
 
-# دالة تهيئة الملفات للتأكد من وجود الحسابات الافتراضية
+# دالة تهيئة الملفات للتأكد من وجود البيانات والتهيئة الافتراضية
 def init_files():
     if not os.path.exists(USERS_FILE):
         pd.DataFrame([
@@ -35,6 +36,14 @@ def init_files():
         pd.DataFrame(columns=["الموظف", "التاريخ", "وقت الحضور", "وقت الانصراف"]).to_csv(ATTENDANCE_FILE, index=False, encoding='utf-8-sig')
     if not os.path.exists(CONTACTS_FILE):
         pd.DataFrame(columns=["النوع", "الاسم", "الهاتف", "العنوان"]).to_csv(CONTACTS_FILE, index=False, encoding='utf-8-sig')
+    
+    # تهيئة ملف الصلاحيات الافتراضية للصفحات (إظهار/إخفاء)
+    if not os.path.exists(PERMISSIONS_FILE):
+        all_pages = ["📦 تكويد الأصناف", "📊 رصيد أول المدة Excel", "🔍 حالة المخزن", "🤝 العملاء والموردين", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "📈 تقارير البيع والشراء", "💸 المصاريف", "⏰ الحضور والانصراف", "⚙️ إدارة وتعديل الصلاحيات"]
+        default_perms = []
+        for page in all_pages:
+            default_perms.append({"اسم الصفحة": page, "مدير": True, "مشرف": True if page in ["🔍 حالة المخزن", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"] else False, "موظف": True if page in ["🔍 حالة المخزن", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"] else False})
+        pd.DataFrame(default_perms).to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
 
 init_files()
 
@@ -48,33 +57,13 @@ def generate_a5_html_invoice(copy_title, inv_id, date, client_name, address, pay
     return f"""
     <div class="print-invoice-container">
         <style>
-            @page {{
-                size: A5 portrait;
-                margin: 5mm;
-            }}
+            @page {{ size: A5 portrait; margin: 5mm; }}
             @media print {{
                 body {{ direction: rtl; background: #fff; color: #000; }}
-                /* إخفاء عناصر واجهة سيتريمليت تماماً عند الطباعة لحفظ الفاتورة فقط */
-                header, [data-testid="stSidebar"], [data-testid="stHeader"], .no-print-btn, .stButton {{
-                    display: none !important;
-                }}
+                header, [data-testid="stSidebar"], [data-testid="stHeader"], .no-print-btn, .stButton {{ display: none !important; }}
                 .print-invoice-container {{ border: 1px solid #000 !important; box-shadow: none !important; padding: 5mm !important; margin: 0 auto 15mm auto !important; page-break-after: always; }}
             }}
-            .print-invoice-container {{
-                width: 140mm;
-                max-width: 100%;
-                border: 2px dashed #333;
-                padding: 15px;
-                margin: 15px auto;
-                direction: rtl;
-                text-align: right;
-                font-family: 'Cairo', sans-serif;
-                background: #fff;
-                color: #000;
-                border-radius: 6px;
-                box-sizing: border-box;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            }}
+            .print-invoice-container {{ width: 140mm; max-width: 100%; border: 2px dashed #333; padding: 15px; margin: 15px auto; direction: rtl; text-align: right; font-family: 'Cairo', sans-serif; background: #fff; color: #000; border-radius: 6px; box-sizing: border-box; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }}
             .invoice-header {{ text-align: center; font-weight: bold; }}
             .invoice-header h2 {{ margin: 0; color: #444; font-size: 16px; }}
             .invoice-header h1 {{ margin: 5px 0; font-size: 20px; color: #000; }}
@@ -84,21 +73,9 @@ def generate_a5_html_invoice(copy_title, inv_id, date, client_name, address, pay
             .invoice-items-table th {{ background: #f2f2f2; border: 1px solid black; padding: 6px; font-weight: bold; }}
             .invoice-items-table td {{ border: 1px solid black; padding: 6px; }}
             .invoice-footer-alert {{ margin-top: 10px; font-size: 10px; font-weight: bold; text-align: center; border: 1px solid #000; padding: 5px; background: #f9f9f9; }}
-            .no-print-btn {{
-                background-color: #2beb67;
-                color: white;
-                padding: 8px 16px;
-                margin: 8px 0;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                font-family: 'Cairo', sans-serif;
-                font-size: 13px;
-                font-weight: bold;
-            }}
+            .no-print-btn {{ background-color: #2beb67; color: white; padding: 8px 16px; margin: 8px 0; border: none; border-radius: 4px; cursor: pointer; font-family: 'Cairo', sans-serif; font-size: 13px; font-weight: bold; }}
             .no-print-btn:hover {{ background-color: #22c353; }}
         </style>
-        
         <div class="invoice-header">
             <h2>📋 {copy_title}</h2>
             <h1>🏢 معرض الكبير</h1>
@@ -111,24 +88,10 @@ def generate_a5_html_invoice(copy_title, inv_id, date, client_name, address, pay
             <tr><td><b>نوع الدفع:</b> {pay_type}</td><td><b>المسؤول:</b> {user}</td></tr>
         </table>
         <table class="invoice-items-table">
-            <tr>
-                <th>الصنف والبيان</th>
-                <th>الكمية</th>
-                <th>سعر المفرد</th>
-                <th>الخصم</th>
-                <th>الصافي الإجمالي</th>
-            </tr>
-            <tr>
-                <td>{item}</td>
-                <td>{qty}</td>
-                <td>{price}</td>
-                <td>{discount}%</td>
-                <td style="font-weight: bold;">{final_total}</td>
-            </tr>
+            <tr><th>الصنف والبيان</th><th>الكمية</th><th>سعر المفرد</th><th>الخصم</th><th>الصافي الإجمالي</th></tr>
+            <tr><td>{item}</td><td>{qty}</td><td>{price}</td><td>{discount}%</td><td style="font-weight: bold;">{final_total}</td></tr>
         </table>
-        <div class="invoice-footer-alert">
-            ⚠️ تنبيه هام جداً: مدة الاستبدال والارتجاع 15 يوماً لا غير من تاريخ الفاتورة بشرط سلامة البضاعة وغلافها.
-        </div>
+        <div class="invoice-footer-alert">⚠️ تنبيه هام جداً: مدة الاستبدال والارتجاع 15 يوماً لا غير من تاريخ الفاتورة بشرط سلامة البضاعة وغلافها.</div>
         <center><button class="no-print-btn" onclick="window.print()">🖨️ طباعة أو حفظ كـ PDF بمقاس A5</button></center>
     </div>
     """
@@ -151,19 +114,21 @@ if not st.session_state.auth:
         else:
             st.error("بيانات الدخول خاطئة.")
 else:
-    # --- بناء القائمة الجانبية والصلاحيات حسب الرتبة ---
+    # جلب الصلاحيات الحالية المخصصة لإظهار/إخفاء الصفحات
+    perms_df = pd.read_csv(PERMISSIONS_FILE)
+    current_role = st.session_state.role
+    
+    # فلترة صفحات القائمة بناءً على إعدادات المدير الحالية في ملف الإعدادات
+    allowed_pages = perms_df[perms_df[current_role] == True]["اسم الصفحة"].tolist()
+    
+    # تأمين ألا تفرغ القائمة تماماً
+    if not allowed_pages:
+        allowed_pages = ["🔍 حالة المخزن"]
+        
     st.sidebar.title(f"👤 {st.session_state.user}")
     st.sidebar.write(f"الرتبة: **{st.session_state.role}**")
     
-    # توحيد نصوص القائمة لتجنب أخطاء الشرط الشرطي (if condition)
-    if st.session_state.role == "مدير":
-        menu = ["📦 تكويد الأصناف", "📊 رصيد أول المدة Excel", "🔍 حالة المخزن", "🤝 العملاء والموردين", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "📈 تقارير البيع والشراء", "💸 المصاريف", "⏰ الحضور والانصراف", "⚙️ إدارة وتعديل الصلاحيات"]
-    elif st.session_state.role == "مشرف":
-        menu = ["🔍 حالة المخزن", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"]
-    else: # موظف عادي
-        menu = ["🔍 حالة المخزن", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"]
-        
-    choice = st.sidebar.selectbox("الانتقال إلى", menu)
+    choice = st.sidebar.selectbox("الانتقال إلى", allowed_pages)
     
     if st.sidebar.button("تسجيل الخروج"):
         st.session_state.auth = False
@@ -181,7 +146,6 @@ else:
     if "تكويد الأصناف" in choice:
         st.header("📦 تكويد وتسجيل أصناف جديدة")
         st.dataframe(inv_df, use_container_width=True)
-        
         st.subheader("➕ إضافة صنف جديد")
         c1, c2, c3, c4 = st.columns(4)
         iid = c1.text_input("كود الصنف (الباركود / ID)")
@@ -312,10 +276,8 @@ else:
                     new_s = pd.DataFrame([{"رقم الفاتورة": inv_id, "التاريخ": datetime.now().strftime("%Y-%m-%d"), "اسم العميل": c_name, "العنوان": c_address, "نوع البيع": sale_type, "الصنف": selected_item, "الكمية": qty, "الخصم %": discount, "إجمالي البيع": final_total, "المسؤول": st.session_state.user}])
                     sales_df = pd.concat([sales_df, new_s], ignore_index=True)
                     sales_df.to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
-                    
                     st.success("🎉 تم حفظ الفاتورة!")
                     
-                    # عرض النسخ الثلاثية بمقاس A5 وإتاحة طباعتها/حفظها PDF
                     copies = ["نسخة العميل", "نسخة الإدارة المالية", "نسخة مسؤول المخازن"]
                     for copy in copies:
                         invoice_html = generate_a5_html_invoice(copy, inv_id, datetime.now().strftime("%Y-%m-%d"), c_name, c_address, sale_type, st.session_state.user, selected_item, qty, item_row['سعر البيع'], discount, final_total)
@@ -328,7 +290,6 @@ else:
             st.info("لا توجد فواتير مبيعات مسجلة في النظام حتى الآن.")
         else:
             search_query = st.text_input("ابحث عن فاتورة (أدخل رقم الفاتورة أو اسم العميل)").strip()
-            
             if search_query:
                 filtered_sales = sales_df[sales_df['رقم الفاتورة'].str.contains(search_query, case=False, na=False) | sales_df['اسم العميل'].str.contains(search_query, case=False, na=False)]
             else:
@@ -340,10 +301,8 @@ else:
             if not filtered_sales.empty:
                 st.subheader("⚙️ اختر الفاتورة المراد إعادة عرضها وطباعتها كـ PDF مقاس A5:")
                 selected_inv_id = st.selectbox("اختر رقم الفاتورة", filtered_sales['رقم الفاتورة'].unique())
-                
                 f_row = sales_df[sales_df['رقم الفاتورة'] == selected_inv_id].iloc[0]
                 
-                # جلب سعر الصنف المفرد من جدول المخزن الحالي لعرضه بشكل صحيح في الفاتورة
                 match_inv_item = inv_df[inv_df['اسم الصنف'] == f_row['الصنف']]
                 unit_price = match_inv_item.iloc[0]['سعر البيع'] if not match_inv_item.empty else 0.0
                 
@@ -417,13 +376,12 @@ else:
                 st.success(f"📌 تم تسجيل انصرافك!")
                 st.rerun()
 
-    # --- 11. صفحة إدارة وتعديل الصلاحيات ---
+    # --- 11. صفحة إدارة وتعديل الصلاحيات وإظهار/إخفاء الصفحات ---
     elif "إدارة وتعديل الصلاحيات" in choice:
-        st.header("⚙️ إدارة وتعديل حسابات موظفي ومشرفي معرض الكبير")
+        st.header("⚙️ إدارة الصلاحيات وحسابات موظفي ومشرفي معرض الكبير")
         u_df = pd.read_csv(USERS_FILE, dtype=str)
-        st.dataframe(u_df, use_container_width=True)
         
-        tab_add, tab_edit = st.tabs(["➕ إنشاء حساب جديد", "✏️ تعديل وتحديث حساب حالي / حذف حساب"])
+        tab_add, tab_edit, tab_visibility = st.tabs(["➕ إنشاء حساب جديد", "✏️ تعديل وحذف حساب", "⚙️ التحكم في إظهار وإخفاء الصفحات"])
         
         with tab_add:
             st.subheader("👤 إضافة مستخدم جديد للنظام")
@@ -441,23 +399,20 @@ else:
                         u_df.to_csv(USERS_FILE, index=False, encoding='utf-8-sig')
                         st.success(f"🎉 تم إنشاء حساب بنجاح للـ {nr} ({nu})")
                         st.rerun()
-                else:
-                    st.error("يرجى إدخال البيانات كاملة.")
+                else: st.error("يرجى إدخال البيانات كاملة.")
                     
         with tab_edit:
             st.subheader("✏️ تعديل بيانات الحسابات الحالية")
             target_user = st.selectbox("اختر الحساب الذي تريد تعديله أو حذفه", u_df["username"].unique())
-            
-            # جلب البيانات الحالية للحساب المختار
             user_data = u_df[u_df["username"] == target_user].iloc[0]
             
             c1, c2, c3 = st.columns(3)
-            edit_username = c1.text_input("تعديل اسم المستخدم", value=user_data["username"])
-            edit_password = c2.text_input("تعديل كلمة المرور", value=user_data["password"])
-            edit_role = c3.selectbox("تعديل الصلاحية الرتبية", ["موظف", "مشرف", "مدير"], index=["موظف", "مشرف", "مدير"].index(user_data["role"]))
+            edit_username = c1.text_input("تعديل اسم المستخدم", value=user_data["username"], key=f"edit_un_{target_user}")
+            edit_password = c2.text_input("تعديل كلمة المرور", value=user_data["password"], key=f"edit_pw_{target_user}")
+            edit_role = c3.selectbox("تعديل الصلاحية الرتبية", ["موظف", "مشرف", "مدير"], index=["موظف", "مشرف", "مدير"].index(user_data["role"]), key=f"edit_rl_{target_user}")
             
             col_btn1, col_btn2 = st.columns(2)
-            if col_btn1.button("💾 حفظ التعديلات الجديدة", use_container_width=True):
+            if col_btn1.button("💾 حفظ التعديلات الجديدة", use_container_width=True, key=f"save_btn_{target_user}"):
                 idx = u_df[u_df["username"] == target_user].index[0]
                 u_df.at[idx, "username"] = edit_username
                 u_df.at[idx, "password"] = edit_password
@@ -466,11 +421,39 @@ else:
                 st.success("🎉 تم تحديث بيانات الحساب بنجاح!")
                 st.rerun()
                 
-            if col_btn2.button("❌ حذف هذا الحساب نهائياً", use_container_width=True):
-                if target_user == "admin":
-                    st.error("❌ لا يمكن حذف الحساب الافتراضي الرئيسي (admin) لحماية النظام!")
+            if col_btn2.button("❌ حذف هذا الحساب نهائياً", use_container_width=True, key=f"del_btn_{target_user}"):
+                if target_user == "admin": st.error("❌ لا يمكن حذف الحساب الرئيسي (admin)!")
                 else:
                     u_df = u_df[u_df["username"] != target_user]
                     u_df.to_csv(USERS_FILE, index=False, encoding='utf-8-sig')
-                    st.success(f"🔥 تم حذف حساب {target_user} بنجاح من النظام!")
-                    st.rerun
+                    st.success(f"🔥 تم حذف حساب {target_user} بنجاح!")
+                    st.rerun()
+
+        with tab_visibility:
+            st.subheader("⚙️ إظهار وإخفاء الصفحات عن الرتب (مدير / مشرف / موظف)")
+            st.info("قم بتعديل الاختيارات أدناه للتحكم في الأقسام التي تظهر لكل رتبة في القائمة الجانبية فوراً:")
+            
+            # عرض جدول الصلاحيات الحالي للتعديل
+            updated_rows = []
+            for idx, row in perms_df.iterrows():
+                st.markdown(f"**📑 قسم: {row['اسم الصفحة']}**")
+                col1, col2, col3 = st.columns(3)
+                
+                # المدير دائماً يملك الصلاحية لحماية النظام، ونعطي خيار التحكم في المشرف والموظف
+                m_perm = col1.checkbox("يظهر للمدير", value=bool(row['مدير']), key=f"p_dir_{idx}", disabled=True)
+                s_perm = col2.checkbox("يظهر للمشرف", value=bool(row['مشرف']), key=f"p_shرف_{idx}")
+                u_perm = col3.checkbox("يظهر للموظف", value=bool(row['موظف']), key=f"p_user_{idx}")
+                
+                updated_rows.append({
+                    "اسم الصفحة": row['اسم الصفحة'],
+                    "مدير": m_perm,
+                    "مشرف": s_perm,
+                    "موظف": u_perm
+                })
+                st.markdown("---")
+                
+            if st.button("💾 حفظ خريطة الصلاحيات الجديدة وتحديث النظام", use_container_width=True):
+                new_perms_df = pd.DataFrame(updated_rows)
+                new_perms_df.to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
+                st.success("🚀 تم تحديث الصلاحيات وإظهار/إخفاء الصفحات بنجاح!")
+                st.rerun()
