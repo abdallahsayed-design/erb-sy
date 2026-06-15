@@ -2,319 +2,529 @@ import streamlit as st
 import pandas as pd
 import os
 from datetime import datetime
+import base64
 
-# --- إعدادات الصفحة الافتراضية لـ Streamlit ---
-st.set_page_config(page_title="معرض الكبير - إدارة المبيعات", page_icon="🏢", layout="wide")
+# إعدادات الصفحة والشكل العام
+st.set_page_config(page_title="نظام معرض الكبير لإدارة المخازن", layout="wide")
 
-# --- إعدادات النظام الأساسية وأسماء الملفات ---
-SHOWROOM_NAME = "معرض الكبير"
-INVENTORY_FILE = "inventory.csv"
-SALES_FILE = "sales.csv"
-CONTACTS_FILE = "contacts.csv"
+# أسماء ملفات البيانات
+INVENTORY_FILE = "inventory_data.csv"
+USERS_FILE = "users_data.csv"
+SALES_FILE = "sales_data.csv"
+PURCHASES_FILE = "purchases_data.csv"
+EXPENSES_FILE = "expenses_data.csv"
+ATTENDANCE_FILE = "attendance_data.csv"
+CONTACTS_FILE = "contacts_data.csv"
+PERMISSIONS_FILE = "permissions_config.csv"
+SETTINGS_FILE = "system_settings.csv"
 
-# --- دالة فحص وإنشاء الملفات تلقائياً لمنع الشاشة البيضاء ---
-def initialize_files():
-    # ملف المخزن
-    if not os.path.exists(INVENTORY_FILE):
-        df = pd.DataFrame([
-            {"اسم الصنف": "غسالة عادية", "الكمية": 10, "سعر البيع": 4500.0},
-            {"اسم الصنف": "ثلاجة 14 قدم", "الكمية": 5, "سعر البيع": 12000.0},
-            {"اسم الصنف": "شاشة 43 بوصة", "الكمية": 8, "سعر البيع": 0.0}  # صنف تجريبي بسعر صفر لاختبار الحماية
-        ])
-        df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
-    
-    # ملف المبيعات
-    if not os.path.exists(SALES_FILE):
-        df = pd.DataFrame(columns=[
-            "رقم الفاتورة", "التاريخ", "اسم العميل", "هاتف العميل", "العنوان", 
-            "نوع البيع", "نظام التحصيل", "تاريخ التحصيل", "الصنف", "الكمية", 
-            "الخصم %", "إجمالي البيع", "المسؤول"
-        ])
-        df.to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
-        
-    # ملف جهات الاتصال والعملاء
-    if not os.path.exists(CONTACTS_FILE):
-        df = pd.DataFrame([
-            {"الاسم": "عبدالله", "النوع": "عميل", "الهاتف": "01012345678", "العنوان": "العباسه"},
-            {"الاسم": "محمد أحمد", "النوع": "عميل", "الهاتف": "01234567890", "العنوان": "أبو حماد"}
-        ])
-        df.to_csv(CONTACTS_FILE, index=False, encoding='utf-8-sig')
-
-# تشغيل دالة التجهيز تلقائياً
-initialize_files()
-
-# --- دالة التفقيط الديناميكي للمبالغ ---
-def tafqeet(amount):
+# دالة تحويل الأرقام إلى كلمات عربية (تفقيط مبسط لبيئة العمل للأعداد الحسابية)
+def number_to_arabic_words(number):
     try:
-        amount = round(float(amount), 2)
-        if amount == 0:
-            return "صفر جنيهاً مصرياً لا غير"
+        num = int(float(number))
+        if num == 0: return "صفر جنيهاً مصرياً لا غير"
         
-        pounds = int(amount)
-        piasters = int(round((amount - pounds) * 100))
+        units = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة"]
+        tens = ["", "عشرة", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"]
+        hundreds = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"]
         
-        def convert_chunk(num):
-            units = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة", "عشرة",
-                     "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"]
-            tens = ["", "", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"]
-            hundreds = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسمائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"]
+        words = []
+        if num >= 1000:
+            thousands = num // 1000
+            if thousands == 1: words.append("ألف")
+            elif thousands == 2: words.append("ألفين")
+            elif thousands >= 3 and thousands <= 10: words.append(f"{units[thousands]} آلاف")
+            else: words.append(f"{thousands} ألف")
+            num %= 1000
             
-            if num < 20:
-                return units[num]
-            elif num < 100:
-                return units[num % 10] + (" و" if num % 10 else "") + tens[num // 10]
-            elif num < 1000:
-                return hundreds[num // 100] + (" و" if num % 100 else "") + convert_chunk(num % 100)
-            return str(num)
-
-        def format_large_numbers(val):
-            if val == 0: return ""
-            if val < 1000: return convert_chunk(val)
-            if val < 1000000:
-                thousands = val // 1000
-                remainder = val % 1000
-                th_text = "ألف" if thousands == 1 else "ألفين" if thousands == 2 else f"{convert_chunk(thousands)} آلاف" if 3 <= thousands <= 10 else f"{convert_chunk(thousands)} ألفاً"
-                return th_text + (" و" if remainder else "") + convert_chunk(remainder)
-            return str(val)
-
-        text = format_large_numbers(pounds) + " جنيهاً مصرياً"
-        if piasters > 0:
-            text += " و" + convert_chunk(piasters) + " قرشاً"
-        return text + " لا غير"
+        if num >= 100:
+            words.append(hundreds[num // 100])
+            num %= 100
+            
+        if num > 0:
+            if len(words) > 0: words.append("و")
+            if num < 10: words.append(units[num])
+            elif num < 20:
+                special = ["عشرة", "أحد عشر", "إثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"]
+                words.append(special[num - 10])
+            else:
+                unit_part = num % 10
+                tens_part = num // 10
+                if unit_part > 0:
+                    words.append(f"{units[unit_part]} و{tens[tens_part]}")
+                else:
+                    words.append(tens[tens_part])
+                    
+        return "فقط " + " و ".join([w for w in words if w != "و"]) + " جنيهاً مصرياً لا غير"
     except:
-        return f"{amount} جنيهاً مصرياً لا غير"
+        return ""
 
-# --- دالة توليد قالب الفاتورة الثلاثية المجمعة HTML ---
-def generate_triple_invoice_html(inv_id, datetime_str, c_name, c_phone, c_address, sale_type, collect_system, collect_date, user, item_name, qty, item_price, discount, final_total):
-    total_in_words = tafqeet(final_total)
+def init_files():
+    if not os.path.exists(USERS_FILE):
+        pd.DataFrame([
+            {"username": "admin", "password": "123", "role": "مدير"},
+            {"username": "sharaf", "password": "456", "role": "مشرف"},
+            {"username": "user1", "password": "111", "role": "موظف"}
+        ]).to_csv(USERS_FILE, index=False, encoding='utf-8-sig')
+        
+    if not os.path.exists(INVENTORY_FILE):
+        pd.DataFrame(columns=["كود الصنف", "اسم الصنف", "الكمية", "سعر الشراء", "سعر البيع"]).to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
+        
+    if not os.path.exists(SALES_FILE):
+        pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "اسم العميل", "هاتف العميل", "العنوان", "نوع البيع", "نظام التحصيل", "تاريخ التحصيل", "الصنف", "الكمية", "الخصم %", "إجمالي البيع", "المسؤول"]).to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
+        
+    if not os.path.exists(PURCHASES_FILE):
+        pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "المورد", "الصنف", "الكمية", "إجمالي الشراء", "المسؤول"]).to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
+        
+    if not os.path.exists(EXPENSES_FILE):
+        pd.DataFrame(columns=["التاريخ", "البيان", "المبلغ", "المسؤول"]).to_csv(EXPENSES_FILE, index=False, encoding='utf-8-sig')
+        
+    if not os.path.exists(ATTENDANCE_FILE):
+        pd.DataFrame(columns=["الموظف", "التاريخ", "وقت الحضور", "وقت الانصراف"]).to_csv(ATTENDANCE_FILE, index=False, encoding='utf-8-sig')
+        
+    if not os.path.exists(CONTACTS_FILE):
+        pd.DataFrame(columns=["النوع", "الاسم", "الهاتف", "العنوان"]).to_csv(CONTACTS_FILE, index=False, encoding='utf-8-sig')
     
+    if not os.path.exists(SETTINGS_FILE):
+        pd.DataFrame([{"اسم المعرض": "معرض الكبير", "العنوان": "ابوحماد - قرية العراقي - بجوار مدرسة الشهيد صلاح فتحي", "رقم الدعم": "0100XXXXXXX"}]).to_csv(SETTINGS_FILE, index=False, encoding='utf-8-sig')
+
+    all_pages = [
+        "📦 تكويد الأصناف", "📊 رصيد أول المدة Excel", "🔍 حالة المخزن", 
+        "🤝 العملاء والموردين", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", 
+        "🔎 البحث عن الفواتير وطباعتها", "📈 تقارير البيع والشراء", "💸 المصاريف", 
+        "⏰ الحضور والانصراف", "⚙️ إدارة وتعديل الصلاحيات", "⚙️ إعدادات بيانات الفاتورة والدعم"
+    ]
+    
+    if not os.path.exists(PERMISSIONS_FILE):
+        default_perms = []
+        for page in all_pages:
+            default_perms.append({
+                "اسم الصفحة": page, "مدير": True, 
+                "مشرف": True if page in ["🔍 حالة المخزن", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"] else False, 
+                "موظف": True if page in ["🔍 حالة المخزن", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"] else False
+            })
+        pd.DataFrame(default_perms).to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
+
+init_files()
+
+settings_df = pd.read_csv(SETTINGS_FILE)
+SHOWROOM_NAME = settings_df.iloc[0]["اسم المعرض"]
+SHOWROOM_ADDRESS = settings_df.iloc[0]["العنوان"]
+INQUIRY_NUMBER = settings_df.iloc[0]["رقم الدعم"]
+
+if 'auth' not in st.session_state: st.session_state.auth = False
+if 'user' not in st.session_state: st.session_state.user = ""
+if 'role' not in st.session_state: st.session_state.role = "موظف"
+
+# دالة توليد الفاتورة الثلاثية المحدثة بالوقت والتفقيط وعرض صفحة الـ A5 بالكامل
+def generate_triple_invoice_html(inv_id, datetime_str, client_name, phone, address, pay_type, collect_system, collect_date, user, item, qty, price, discount, final_total):
+    collect_info = f"<tr><td><b>نظام التحصيل:</b> {collect_system}</td><td><b>تاريخ التحصيل:</b> {collect_date}</td></tr>" if pay_type == "آجل (على الحساب)" else ""
+    arabic_total_words = number_to_arabic_words(final_total)
+    
+    # بناء جداول الأصناف حسب نوع النسخة (المخزن يعرض فقط الصنف والكمية)
+    standard_table_th = "<tr><th>الصنف والبيان</th><th>الكمية</th><th>سعر المفرد</th><th>الخصم</th><th>الصافي الإجمالي</th></tr>"
+    standard_table_td = f"<tr><td>{item}</td><td>{qty}</td><td>{price} جنيه</td><td>{discount}%</td><td style='font-weight: bold;'>{final_total} جنيه</td></tr>"
+    
+    store_table_th = "<tr><th>الصنف والبيان</th><th>الكمية المطلوبة للصرف</th></tr>"
+    store_table_td = f"<tr><td style='font-size: 15px; font-weight: bold;'>{item}</td><td style='font-size: 16px; font-weight: bold;'>{qty}</td></tr>"
+
     html_content = f"""
-    <style>
-        @media print {{
-            .no-print-zone {{ display: none !important; }}
-            .invoice-page {{ page-break-after: always; min-height: 98vh; }}
-        }}
-        .invoice-page {{
-            direction: rtl;
-            font-family: 'Arial', sans-serif;
-            border: 2px dashed #000;
-            padding: 15px;
-            margin-bottom: 30px;
-            background: #fff;
-            color: #000;
-        }}
-        .invoice-header {{ text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }}
-        .invoice-header h3 {{ margin: 0; background: #000; color: #fff; padding: 5px; display: inline-block; font-size: 16px; }}
-        .invoice-header h1 {{ margin: 5px 0; font-size: 24px; }}
-        .invoice-details-table, .invoice-items-table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; }}
-        .invoice-details-table td {{ padding: 6px; font-size: 14px; border: 1px solid #ddd; color: #000; }}
-        .invoice-items-table th {{ background: #f2f2f2; font-weight: bold; font-size: 13px; border: 1px solid #000; padding: 8px; color: #000; }}
-        .invoice-items-table td {{ border: 1px solid #000; padding: 8px; text-align: center; font-size: 14px; color: #000; }}
-        .total-words-area {{ border: 1px dashed #000; padding: 10px; background: #f9f9f9; font-weight: bold; font-size: 14px; margin-bottom: 15px; color: #000; }}
-        .invoice-footer-alert {{ font-size: 12px; font-weight: bold; border-top: 1px solid #000; padding-top: 5px; text-align: center; color: #000; }}
-    </style>
-
-    <div class="no-print-zone" style="text-align:center; margin-bottom:20px;">
-        <button class="print-trigger-btn" style="padding: 10px 20px; font-size: 16px; font-weight: bold; cursor: pointer; background-color: #1e88e5; color: white; border: none; border-radius: 4px;" onclick="window.print()">🖨️ إصدار وطباعة الفاتورة الثلاثية فوراً (A5)</button>
-    </div>
-
-    <div class="invoice-page">
-        <div class="invoice-header">
-            <h3>📋 نسخة العميل (أصل الفاتورة)</h3>
-            <h1>🏢 {SHOWROOM_NAME}</h1>
-            <p>العنوان: ابوحماد - قرية العراقي - بجوار مدرسة الشهيد صلاح فتحي</p>
-            <p style="font-size: 12px; font-weight: bold;">📞 رقم الاستعلام والدعم: 01289518413</p>
+    <div class="triple-print-wrapper">
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap');
+            @page {{ size: A5 portrait; margin: 0; }}
+            @media print {{
+                body {{ direction: rtl; background: #fff; color: #000; padding: 0; margin: 0; }}
+                header, [data-testid="stSidebar"], [data-testid="stHeader"], .no-print-zone, .stButton, .download-btn-area {{ display: none !important; }}
+                .invoice-page {{ width: 148mm; height: 210mm; box-sizing: border-box; padding: 10mm !important; margin: 0 !important; page-break-after: always; border: none !important; box-shadow: none !important; }}
+            }}
+            .triple-print-wrapper {{ direction: rtl; text-align: right; font-family: 'Cairo', sans-serif; }}
+            .invoice-page {{ width: 148mm; max-width: 100%; border: 2px solid #000; padding: 20px; margin: 20px auto; background: #fff; color: #000; box-sizing: border-box; page-break-after: always; }}
+            .invoice-header {{ text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }}
+            .invoice-header h3 {{ margin: 0; background: #000; color: #fff; padding: 4px 12px; display: inline-block; font-size: 14px; border-radius: 4px; }}
+            .invoice-header h1 {{ margin: 6px 0; font-size: 24px; color: #000; font-weight: 700; }}
+            .invoice-header p {{ font-size: 12px; margin: 2px 0; color: #000; }}
+            .invoice-details-table {{ width: 100%; font-size: 13px; margin-top: 5px; border-bottom: 1px solid #000; padding-bottom: 8px; }}
+            .invoice-details-table td {{ padding: 4px 0; width: 50%; }}
+            .invoice-items-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; border: 2px solid black; font-size: 13px; text-align: center; }}
+            .invoice-items-table th {{ background: #f2f2f2; border: 1px solid black; padding: 8px; font-weight: bold; color: #000; }}
+            .invoice-items-table td {{ border: 1px solid black; padding: 8px; }}
+            .total-words-area {{ margin-top: 15px; background: #fff; border: 1px dashed #000; padding: 8px; font-size: 14px; font-weight: bold; text-align: right; }}
+            .invoice-footer-alert {{ margin-top: 15px; font-size: 11px; font-weight: bold; text-align: center; border: 1px solid #000; padding: 6px; background: #fff; }}
+            .print-trigger-btn {{ background-color: #28a745; color: white; padding: 12px 24px; margin: 10px auto; border: none; border-radius: 5px; cursor: pointer; font-size: 15px; font-weight: bold; display: block; text-align: center; }}
+        </style>
+        
+        <div class="no-print-zone" style="text-align:center; margin-bottom:20px;">
+            <button class="print-trigger-btn" onclick="window.print()">🖨️ إصدار وطباعة الفاتورة الثلاثية فوراً (A5)</button>
         </div>
-        <table class="invoice-details-table">
-            <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ والوقت:</b> {datetime_str}</td></tr>
-            <tr><td><b>اسم العميل:</b> {c_name}</td><td><b>الهاتف:</b> {c_phone if c_phone else "غير محدد"}</td></tr>
-            <tr><td><b>العنوان:</b> {c_address if c_address else "غير محدد"}</td><td><b>المسؤول:</b> {user}</td></tr>
-            <tr><td><b>نوع الدفع:</b> {sale_type}</td><td><b>حالة التحصيل:</b> {collect_system} ({collect_date})</td></tr>
-        </table>
-        <table class="invoice-items-table">
-            <tr><th>الصنف والبيان</th><th>الكمية</th><th>سعر المفرد</th><th>الخصم</th><th>الصافي الإجمالي</th></tr>
-            <tr><td>{item_name}</td><td>{qty}</td><td>{item_price} جنيه</td><td>{discount}%</td><td style='font-weight: bold;'>{final_total} جنيه</td></tr>
-        </table>
-        <div class="total-words-area">💰 إجمالي المبلغ باللغة العربية: <span>{total_in_words}</span></div>
-        <div class="invoice-footer-alert">⚠️ تنبيه: مدة الاستبدال والارتجاع 15 يوماً من تاريخ الفاتورة بشرط سلامة الغلاف الأصلي.</div>
-    </div>
 
-    <div class="invoice-page">
-        <div class="invoice-header">
-            <h3>📋 نسخة الإدارة المالية والحسابات</h3>
-            <h1>🏢 {SHOWROOM_NAME}</h1>
-            <p>العنوان: ابوحماد - قرية العراقي - بجوار مدرسة الشهيد صلاح فتحي</p>
+        <div class="invoice-page">
+            <div class="invoice-header">
+                <h3>📋 نسخة العميل (أصل الفاتورة)</h3>
+                <h1>🏢 {SHOWROOM_NAME}</h1>
+                <p>العنوان: {SHOWROOM_ADDRESS}</p>
+                <p style="font-size: 12px; font-weight: bold;">📞 رقم الاستعلام والدعم: {INQUIRY_NUMBER}</p>
+            </div>
+            <table class="invoice-details-table">
+                <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ والوقت:</b> {datetime_str}</td></tr>
+                <tr><td><b>اسم العميل:</b> {client_name}</td><td><b>الهاتف:</b> {phone if phone else 'غير محدد'}</td></tr>
+                <tr><td><b>العنوان:</b> {address if address else 'غير محدد'}</td><td><b>المسؤول:</b> {user}</td></tr>
+                <tr><td><b>نوع الدفع:</b> {pay_type}</td><td></td></tr>
+                {collect_info}
+            </table>
+            <table class="invoice-items-table">
+                {standard_table_th}
+                {standard_table_td}
+            </table>
+            <div class="total-words-area">💰 إجمالي المبلغ باللغة العربية: <span style="color:#000;">{arabic_total_words}</span></div>
+            <div class="invoice-footer-alert">⚠️ تنبيه: مدة الاستبدال والارتجاع 15 يوماً من تاريخ الفاتورة بشرط سلامة الغلاف الأصلي.</div>
         </div>
-        <table class="invoice-details-table">
-            <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ والوقت:</b> {datetime_str}</td></tr>
-            <tr><td><b>اسم العميل:</b> {c_name}</td><td><b>الهاتف:</b> {c_phone if c_phone else "غير محدد"}</td></tr>
-            <tr><td><b>نوع الدفع:</b> {sale_type}</td><td><b>المسؤول:</b> {user}</td></tr>
-        </table>
-        <table class="invoice-items-table">
-            <tr><th>الصنف والبيان</th><th>الكمية</th><th>سعر المفرد</th><th>الخصم</th><th>الصافي الإجمالي</th></tr>
-            <tr><td>{item_name}</td><td>{qty}</td><td>{item_price} جنيه</td><td>{discount}%</td><td style='font-weight: bold;'>{final_total} جنيه</td></tr>
-        </table>
-        <div class="total-words-area">💰 إجمالي المبلغ باللغة العربية: <span>{total_in_words}</span></div>
-    </div>
 
-    <div class="invoice-page">
-        <div class="invoice-header">
-            <h3>📦 نسخة مسؤول المخازن والصرف (أصناف وكميات فقط)</h3>
-            <h1>🏢 {SHOWROOM_NAME}</h1>
-            <p>التوجيه: يرجى صرف الأصناف المبينة أدناه لمستلم الفاتورة</p>
+        <div class="invoice-page">
+            <div class="invoice-header">
+                <h3>📋 نسخة الإدارة المالية والحسابات</h3>
+                <h1>🏢 {SHOWROOM_NAME}</h1>
+                <p>العنوان: {SHOWROOM_ADDRESS}</p>
+            </div>
+            <table class="invoice-details-table">
+                <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ والوقت:</b> {datetime_str}</td></tr>
+                <tr><td><b>اسم العميل:</b> {client_name}</td><td><b>الهاتف:</b> {phone if phone else 'غير محدد'}</td></tr>
+                <tr><td><b>نوع الدفع:</b> {pay_type}</td><td><b>المسؤول:</b> {user}</td></tr>
+                {collect_info}
+            </table>
+            <table class="invoice-items-table">
+                {standard_table_th}
+                {standard_table_td}
+            </table>
+            <div class="total-words-area">💰 إجمالي المبلغ باللغة العربية: <span style="color:#000;">{arabic_total_words}</span></div>
         </div>
-        <table class="invoice-details-table">
-            <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ والوقت:</b> {datetime_str}</td></tr>
-            <tr><td><b>اسم العميل:</b> {c_name}</td><td><b>المسؤول المصدر:</b> {user}</td></tr>
-            <tr><td><b>نوع الدفع:</b> {sale_type}</td><td><b>حالة الإذن:</b> جاهز للصرف</td></tr>
-        </table>
-        <table class="invoice-items-table">
-            <tr><th>الصنف والبيان</th><th>الكمية المطلوبة للصرف</th></tr>
-            <tr><td style='font-size: 15px; font-weight: bold;'>{item_name}</td><td style='font-size: 16px; font-weight: bold;'>{qty}</td></tr>
-        </table>
-        <div class="invoice-footer-alert" style="margin-top:40px;">توقيع أمين المخزن: ............................ | توقيع المستلم: ............................</div>
-    </div>
 
-    <script>
-        setTimeout(function() {{
-            window.print();
-        }}, 600);
-    </script>
+        <div class="invoice-page">
+            <div class="invoice-header">
+                <h3>📦 نسخة مسؤول المخازن والصرف (أصناف وكميات فقط)</h3>
+                <h1>🏢 {SHOWROOM_NAME}</h1>
+                <p>التوجيه: يرجى صرف الأصناف المبينة أدناه لمستلم الفاتورة</p>
+            </div>
+            <table class="invoice-details-table">
+                <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ والوقت:</b> {datetime_str}</td></tr>
+                <tr><td><b>اسم العميل:</b> {client_name}</td><td><b>المسؤول المصدر:</b> {user}</td></tr>
+                <tr><td><b>نوع الدفع:</b> {pay_type}</td><td><b>حالة الإذن:</b> جاهز للصرف</td></tr>
+            </table>
+            <table class="invoice-items-table">
+                {store_table_th}
+                {store_table_td}
+            </table>
+            <div class="invoice-footer-alert" style="margin-top:40px;">توقيع أمين المخزن: ............................ | توقيع المستلم: ............................</div>
+        </div>
+
+        <script>
+            setTimeout(function() {{
+                window.print();
+            }}, 500);
+        </script>
+    </div>
     """
     return html_content
 
-def get_download_link(html_str, filename):
-    import base64
-    b64 = base64.b64encode(html_str.encode('utf-8-sig')).decode()
-    return f'<a href="data:text/html;base64,{b64}" download="{filename}" style="display:block; text-align:center; margin-bottom:15px; color:#fff; background:#2e7d32; padding:10px; border-radius:5px; text-decoration:none; font-weight:bold;">📥 تحميل ملف الفاتورة بصيغة HTML للكمبيوتر</a>'
+def get_download_link(html_content, filename="invoice.html"):
+    b64 = base64.b64encode(html_content.encode('utf-8-sig')).decode()
+    return f'<div class="download-btn-area"><a href="data:text/html;base64,{b64}" download="{filename}" style="display: block; padding: 12px; color: white; background-color: #007bff; text-decoration: none; border-radius: 5px; font-weight: bold; text-align: center; margin: 15px auto; max-width:400px;">📥 اضغط هنا لتنزيل وحفظ ملف الفاتورة في التحميلات فوراً</a></div>'
 
-# --- شاشة الفاتورة والبيع ---
-def sales_invoice_tab(inv_df, sales_df, contacts_df):
-    st.header(f"📤 إنشاء فاتورة مبيعات جديدة - {SHOWROOM_NAME}")
+# --- واجهة تسجيل الدخول ---
+if not st.session_state.auth:
+    st.title(f"🏢 نظام {SHOWROOM_NAME} - تسجيل الدخول")
+    user_input = st.text_input("اسم المستخدم", key="login_user").strip()
+    pw_input = st.text_input("كلمة المرور", type="password", key="login_pw").strip()
     
-    if inv_df.empty: 
-        st.warning("⚠️ المخزن فارغ تماماً.")
-        return inv_df, sales_df
-
-    c_list = contacts_df['الاسم'].unique() if not contacts_df.empty else []
-    c1, c2, c3, c4 = st.columns(4)
-    cust_type = c1.radio("نوع العميل", ["سريع / غير مسجل", "مسجل مسبقاً"])
+    if st.button("دخول للنظام", use_container_width=True):
+        u_df = pd.read_csv(USERS_FILE, dtype=str)
+        match = u_df[(u_df['username'] == user_input) & (u_df['password'] == pw_input)]
+        if not match.empty:
+            st.session_state.auth = True
+            st.session_state.user = user_input
+            st.session_state.role = match.iloc[0]['role']
+            st.success(f"مرحباً بك يا {user_input} ({st.session_state.role})")
+            st.rerun()
+        else: st.error("بيانات الدخول خاطئة.")
+else:
+    perms_df = pd.read_csv(PERMISSIONS_FILE)
+    current_role = st.session_state.role
     
-    c_name, c_phone, c_address = "", "", ""
-    if cust_type == "مسجل مسبقاً" and len(c_list) > 0:
-        c_name = c2.selectbox("اختر العميل", c_list)
-        c_address = contacts_df[contacts_df['الاسم'] == c_name]['العنوان'].values[0] if 'العنوان' in contacts_df.columns else ""
-        c_phone = contacts_df[contacts_df['الاسم'] == c_name]['الهاتف'].values[0] if 'الهاتف' in contacts_df.columns else ""
-    else:
-        c_name = c2.text_input("اسم العميل")
-        c_phone = c3.text_input("رقم هاتف العميل")
-        c_address = c4.text_input("عنوان العميل")
+    allowed_actions = perms_df[perms_df[current_role] == True]["اسم الصفحة"].tolist()
+    sidebar_pages = [p for p in allowed_actions]
     
-    st.markdown("---")
-    cc1, cc2, cc3 = st.columns(3)
-    sale_type = cc1.selectbox("طبيعة البيع", ["نقدي (كاش)", "آجل (على الحساب)"])
-    
-    collect_system = "دفعة كاملة كاش"
-    collect_date = "فورياً"
-    if sale_type == "آجل (على الحساب)":
-        collect_system = cc2.selectbox("نظام تحصيل الفاتورة الآجلة", ["دفعة واحدة لاحقاً", "أقساط أسبوعية", "أقساط شهرية", "نظام دفعات مخصصة"])
-        collect_date = str(cc3.date_input("تاريخ التحصيل المستهدف"))
-    
-    st.markdown("---")
-    c5, c6, c7 = st.columns(3)
-    selected_item = c5.selectbox("اختر المنتج للبيع", inv_df['اسم الصنف'].unique())
-    qty = c6.number_input("الكمية المطلوبة", min_value=1, step=1)
-    
-    discount = 0.0
-    user_role = st.session_state.get('role', 'مدير')
-    if user_role in ["مدير", "مشرف"]:
-        discount = c7.number_input("نسبة الخصم الممنوحة (%)", min_value=0.0, max_value=100.0, step=0.5)
-    else: 
-        c7.write("🔒 *صلاحية الخصم مغلقة للموظفين*")
+    if not sidebar_pages: sidebar_pages = ["🔍 حالة المخزن"]
         
-    item_row = inv_df[inv_df['اسم الصنف'] == selected_item].iloc[0]
-    original_price = float(item_row['سعر البيع'])
+    st.sidebar.title(f"👤 {st.session_state.user}")
+    st.sidebar.write(f"الرتبة: **{st.session_state.role}**")
     
-    if original_price == 0.0:
-        st.error("⚠️ تنبيه أمين النظام: سعر هذا الصنف مسجل بـ 0.0 في قاعدة البيانات!")
-        item_price = st.number_input("الرجاء إدخال سعر بيع القطعة الفعلي يدوياً الآن لإصلاح الفاتورة:", min_value=0.01, value=1.0, key="manual_price_entry")
-    else:
-        item_price = original_price
+    choice = st.sidebar.selectbox("الانتقال إلى", sidebar_pages)
+    
+    if st.sidebar.button("تسجيل الخروج"):
+        st.session_state.auth = False
+        st.rerun()
 
-    subtotal = item_price * qty
-    discount_amount = subtotal * (discount / 100)
-    final_total = subtotal - discount_amount
-    
-    st.info(f"📊 المتوفر بالمخزن: {item_row['الكمية']} قطعة | الصافي الإجمالي المطلوب: {final_total} جنيه")
-    
-    # استخدام session_state لعرض الفاتورة بعد الـ rerun لضمان الاستقرار الفوري
-    if "invoice_ready" in st.session_state and st.session_state.invoice_ready:
-        st.markdown(get_download_link(st.session_state.invoice_html, f"الفاتورة_{st.session_state.invoice_id}.html"), unsafe_allow_html=True)
-        st.markdown(st.session_state.invoice_html, unsafe_allow_html=True)
-        # مسح الفاتورة المؤقتة حتى لا تظل عالقة عند تغيير الأصناف
-        del st.session_state.invoice_ready
-    
-    if st.button("🧾 إصدار وطباعة وحفظ الفاتورة الثلاثية المجمعة (A5)", use_container_width=True):
-        idx = inv_df[inv_df['اسم الصنف'] == selected_item].index[0]
-        
-        if int(inv_df.at[idx, 'الكمية']) < qty: 
-            st.error("❌ خطأ: الكمية المطلوبة غير متوفرة حالياً في المخزن!")
-        elif not c_name: 
-            st.error("❌ خطأ: يرجى كتابة اسم العميل أولاً لإصدار الفاتورة باسمه.")
-        else:
-            inv_df.at[idx, 'الكمية'] = int(inv_df.at[idx, 'الكمية']) - qty
-            inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
-            
-            inv_id = "INV-" + str(int(datetime.now().timestamp()))
-            current_datetime_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            current_user = st.session_state.get('user', 'admin')
-            
-            new_s = pd.DataFrame([{
-                "رقم الفاتورة": inv_id, "التاريخ": current_datetime_str, "اسم العميل": c_name, 
-                "هاتف العميل": c_phone, "العنوان": c_address, "نوع البيع": sale_type, 
-                "نظام التحصيل": collect_system, "تاريخ التحصيل": collect_date, "الصنف": selected_item, 
-                "الكمية": str(qty), "الخصم %": str(discount), "إجمالي البيع": str(final_total), "المسؤول": current_user
-            }])
-            
-            sales_df = pd.concat([sales_df, new_s], ignore_index=True)
-            sales_df.to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
-            
-            # حفظ الفاتورة في جلسة العمل المؤقتة لعرضها بعد التحديث الفوري
-            triple_html = generate_triple_invoice_html(
-                inv_id, current_datetime_str, c_name, c_phone, c_address, 
-                sale_type, collect_system, collect_date, current_user, 
-                selected_item, qty, item_price, discount, final_total
-            )
-            st.session_state.invoice_html = triple_html
-            st.session_state.invoice_id = inv_id
-            st.session_state.invoice_ready = True
-            
-            st.success("🎉 تم تسجيل وحفظ الفاتورة بنجاح وجاري تحديث البيانات والطباعة...")
-            st.rerun()  # 🔄 تحديث الشاشة فورياً لمزامنة جدول الجرد والتقارير
-            
-    return inv_df, sales_df
+    inv_df = pd.read_csv(INVENTORY_FILE, dtype={"كود الصنف": str, "الكمية": int, "سعر الشراء": float, "سعر البيع": float})
+    sales_df = pd.read_csv(SALES_FILE, dtype=str)
+    purchases_df = pd.read_csv(PURCHASES_FILE, dtype=str)
+    exp_df = pd.read_csv(EXPENSES_FILE)
+    att_df = pd.read_csv(ATTENDANCE_FILE)
+    contacts_df = pd.read_csv(CONTACTS_FILE, dtype=str)
 
-# --- نقطة انطلاق البرنامج (Main Executable) ---
-if __name__ == "__main__":
-    # تهيئة بيانات الجلسة الافتراضية لمنع الأخطاء البيضاء
-    if 'role' not in st.session_state: st.session_state['role'] = 'مدير'
-    if 'user' not in st.session_state: st.session_state['user'] = 'admin'
-    
-    # قراءة الملفات الحالية المحدثة
-    inv_df = pd.read_csv(INVENTORY_FILE)
-    sales_df = pd.read_csv(SALES_FILE)
-    contacts_df = pd.read_csv(CONTACTS_FILE)
-    
-    # القائمة الجانبية للتنقل
-    st.sidebar.title("🏢 لوحة التحكم")
-    menu = ["📤 فاتورة بيع جديدة", "📊 عرض المخزون", "📜 سجل الفواتير القديمة"]
-    choice = st.sidebar.radio("اختر الشاشة", menu)
-    
-    if choice == "📤 فاتورة بيع جديدة":
-        inv_df, sales_df = sales_invoice_tab(inv_df, sales_df, contacts_df)
-    elif choice == "📊 عرض المخزون":
-        st.header("📊 حالة بضائع المخزن الحالية")
+    # --- 1. صفحة تكويد الأصناف ---
+    if "تكويد الأصناف" in choice:
+        st.header("📦 تكويد وتسجيل أصناف جديدة")
         st.dataframe(inv_df, use_container_width=True)
-    elif choice == "📜 سجل الفواتير القديمة":
-        st.header("📜 أرشيف فواتير مبيعات المعرض")
+        st.subheader("➕ إضافة صنف جديد")
+        c1, c2, c3, c4 = st.columns(4)
+        iid = c1.text_input("كود الصنف (الباركود / ID)")
+        iname = c2.text_input("اسم المنتج")
+        ipurchase = c3.number_input("سعر الشراء الافتراضي", min_value=0.0, step=1.0)
+        isale = c4.number_input("سعر البيع الافتراضي", min_value=0.0, step=1.0)
+        
+        if st.button("تكويد وحفظ"):
+            if iid and iname:
+                if iid in inv_df["كود الصنف"].values: st.warning("⚠️ هذا الكود مسجل مسبقاً!")
+                else:
+                    new_item = pd.DataFrame([{"كود الصنف": iid, "اسم الصنف": iname, "الكمية": 0, "سعر الشراء": ipurchase, "سعر البيع": isale}])
+                    inv_df = pd.concat([inv_df, new_item], ignore_index=True)
+                    inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
+                    st.success("🎉 تم تكويد المنتج بنجاح!")
+                    st.rerun()
+
+    # --- 2. صفحة رفع رصيد أول المدة ---
+    elif "رصيد أول المدة" in choice:
+        st.header("📊 رفع بضائع ورصيد أول المدة عبر ملف Excel")
+        uploaded_file = st.file_uploader("اختر شيت الاكسل الخاص بالبضائع", type=["xlsx", "xls"])
+        if uploaded_file is not None:
+            try:
+                excel_df = pd.read_excel(uploaded_file, dtype={"كود الصنف": str})
+                st.dataframe(excel_df)
+                if st.button("تأكيد ودمج الملف في رصيد أول المدة"):
+                    combined_df = pd.concat([inv_df, excel_df]).drop_duplicates(subset=['كود الصنف'], keep='last')
+                    combined_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
+                    st.success("🚀 تم رفع وتحديث المخزن بنجاح!")
+                    st.rerun()
+            except Exception as e: st.error(f"❌ حدث خطأ أثناء قراءة الملف: {e}")
+
+    # --- 3. صفحة حالة المخزن ---
+    elif "حالة المخزن" in choice:
+        st.header("🔍 جرد بضائع المخزن الحالية")
+        st.dataframe(inv_df, use_container_width=True)
+
+    # --- 4. صفحة العملاء والموردين ---
+    elif "العملاء والموردين" in choice:
+        st.header("🤝 إدارة بيانات العملاء والموردين")
+        st.dataframe(contacts_df, use_container_width=True)
+        c1, c2, c3, c4 = st.columns(4)
+        ctype = c1.selectbox("النوع", ["عميل", "مورد"])
+        cname = c2.text_input("الاسم")
+        cphone = c3.text_input("الهاتف")
+        caddress = c4.text_input("العنوان")
+        if st.button("حفظ الجهة"):
+            if cname:
+                new_c = pd.DataFrame([{"النوع": ctype, "الاسم": cname, "الهاتف": cphone, "العنوان": caddress}])
+                contacts_df = pd.concat([contacts_df, new_c], ignore_index=True)
+                contacts_df.to_csv(CONTACTS_FILE, index=False, encoding='utf-8-sig')
+                st.success("✅ تم الحفظ!")
+                st.rerun()
+
+    # --- 5. صفحة المشتريات ---
+    elif "فاتورة شراء جديدة" in choice:
+        st.header("📥 تسجيل وإدارة فواتير المشتريات")
+        t_new, t_manage = st.tabs(["📥 تسجيل فاتورة شراء جديدة", "✏️ تعديل وحذف فواتير الشراء"])
+        
+        with t_new:
+            if inv_df.empty: st.warning("⚠️ قم بتكويد بضائع أولاً.")
+            else:
+                m_list = contacts_df[contacts_df['النوع'] == 'مورد']['الاسم'].unique()
+                if len(m_list) == 0: m_list = ["مورد عام"]
+                c1, c2, c3 = st.columns(3)
+                vendor = c1.selectbox("المورد", m_list)
+                item = c2.selectbox("الصنف المشترى", inv_df['اسم الصنف'].unique())
+                qty = c3.number_input("الكمية", min_value=1, step=1)
+                
+                item_row = inv_df[inv_df['اسم الصنف'] == item].iloc[0]
+                total = float(item_row['سعر الشراء']) * qty
+                if st.button("حفظ المشتريات"):
+                    idx = inv_df[inv_df['اسم الصنف'] == item].index[0]
+                    inv_df.at[idx, 'الكمية'] = int(inv_df.at[idx, 'الكمية']) + qty
+                    inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
+                    pur_id = "PUR-" + str(int(datetime.now().timestamp()))
+                    new_p = pd.DataFrame([{"رقم الفاتورة": pur_id, "التاريخ": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "المورد": vendor, "الصنف": item, "الكمية": str(qty), "إجمالي الشراء": str(total), "المسؤول": st.session_state.user}])
+                    purchases_df = pd.concat([purchases_df, new_p], ignore_index=True)
+                    purchases_df.to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
+                    st.success("✅ تم تسجيل الوارد!")
+                    st.rerun()
+                        
+        with t_manage:
+            st.subheader("⚙️ مراجعة وتعديل وحذف فواتير الشراء السابقة")
+            if purchases_df.empty: st.info("لا توجد فواتير شراء مسجلة حالياً.")
+            else:
+                st.dataframe(purchases_df, use_container_width=True)
+                target_pur_id = st.selectbox("اختر رقم فاتورة الشراء للإجراء", purchases_df["رقم الفاتورة"].unique())
+                p_row = purchases_df[purchases_df["رقم الفاتورة"] == target_pur_id].iloc[0]
+                
+                if st.button("❌ حذف فاتورة الشراء هذه بالكامل وخصمها من المخزن", use_container_width=True):
+                    p_item = p_row["الصنف"]
+                    p_qty = int(p_row["الكمية"])
+                    if p_item in inv_df["اسم الصنف"].values:
+                        inv_idx = inv_df[inv_df["اسم الصنف"] == p_item].index[0]
+                        inv_df.at[inv_idx, "الكمية"] = max(0, int(inv_df.at[inv_idx, "الكمية"]) - p_qty)
+                        inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
+                    
+                    purchases_df = purchases_df[purchases_df["رقم الفاتورة"] != target_pur_id]
+                    purchases_df.to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
+                    st.success("🔥 تم حذف فاتورة الشراء وتعديل رصيد المخزن!")
+                    st.rerun()
+
+    # --- 6. صفحة فاتورة بيع جديدة ---
+    elif "فاتورة بيع جديدة" in choice:
+        st.header(f"📤 إنشاء فاتورة مبيعات جديدة - {SHOWROOM_NAME}")
+        if inv_df.empty: st.warning("⚠️ المخزن فارغ.")
+        else:
+            c_list = contacts_df[contacts_df['النوع'] == 'عميل']['الاسم'].unique()
+            c1, c2, c3, c4 = st.columns(4)
+            cust_type = c1.radio("نوع العميل", ["سريع / غير مسجل", "مسجل مسبقاً"])
+            
+            c_phone = ""
+            if cust_type == "مسجل مسبقاً" and len(c_list) > 0:
+                c_name = c2.selectbox("اختر العميل", c_list)
+                c_address = contacts_df[contacts_df['الاسم'] == c_name]['العنوان'].values[0]
+                c_phone = contacts_df[contacts_df['الاسم'] == c_name]['الهاتف'].values[0]
+            else:
+                c_name = c2.text_input("اسم العميل")
+                c_phone = c3.text_input("رقم هاتف العميل")
+                c_address = c4.text_input("عنوان العميل")
+            
+            visit_count = 0
+            if c_name and not sales_df.empty:
+                visit_count = len(sales_df[sales_df["اسم العميل"] == c_name])
+            elif c_phone and not sales_df.empty:
+                visit_count = len(sales_df[sales_df["هاتف العميل"] == c_phone])
+                
+            st.info(f"📊 عدد زيارات ومبيعات هذا العميل السابقة في النظام: **{visit_count}** مرة")
+            
+            st.markdown("---")
+            cc1, cc2, cc3 = st.columns(3)
+            sale_type = cc1.selectbox("طبيعة البيع", ["نقدي (كاش)", "آجل (على الحساب)"])
+            
+            collect_system = "دفعة كاملة كاش"
+            collect_date = "فورياً"
+            if sale_type == "آجل (على الحساب)":
+                collect_system = cc2.selectbox("نظام تحصيل الفاتورة الآجلة", ["دفعة واحدة لاحقاً", "أقساط أسبوعية", "أقساط شهرية", "نظام دفعات مخصصة"])
+                collect_date = str(cc3.date_input("تاريخ التحصيل المستهدف"))
+            
+            st.markdown("---")
+            c5, c6, c7 = st.columns(3)
+            selected_item = c5.selectbox("اختر المنتج للبيع", inv_df['اسم الصنف'].unique())
+            qty = c6.number_input("الكمية المطلوبة", min_value=1, step=1)
+            
+            discount = 0.0
+            if st.session_state.role in ["مدير", "مشرف"]:
+                discount = c7.number_input("نسبة الخصم الممنوحة (%)", min_value=0.0, max_value=100.0, step=0.5)
+            else: c7.write("🔒 *صلاحية الخصم مغلقة للموظفين*")
+                
+            item_row = inv_df[inv_df['اسم الصنف'] == selected_item].iloc[0]
+            subtotal = float(item_row['سعر البيع']) * qty
+            discount_amount = subtotal * (discount / 100)
+            final_total = subtotal - discount_amount
+            
+            st.warning(f"📊 المتوفر بالمخزن: {item_row['الكمية']} | الصافي المطلوب: {final_total} جنيه")
+            
+            if st.button("🧾 إصدار وطباعة وحفظ الفاتورة الثلاثية المجمعة (A5)", use_container_width=True):
+                idx = inv_df[inv_df['اسم الصنف'] == selected_item].index[0]
+                if int(inv_df.at[idx, 'الكمية']) < qty: st.error("❌ الكمية لا تكفي في المخزن!")
+                elif not c_name: st.error("❌ يرجى تحديد أو كتابة اسم العميل أولاً.")
+                else:
+                    inv_df.at[idx, 'الكمية'] = int(inv_df.at[idx, 'الكمية']) - qty
+                    inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
+                    
+                    inv_id = "INV-" + str(int(datetime.now().timestamp()))
+                    current_datetime_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    
+                    new_s = pd.DataFrame([{"رقم الفاتورة": inv_id, "التاريخ": current_datetime_str, "اسم العميل": c_name, "هاتف العميل": c_phone, "العنوان": c_address, "نوع البيع": sale_type, "نظام التحصيل": collect_system, "تاريخ التحصيل": collect_date, "الصنف": selected_item, "الكمية": str(qty), "الخصم %": str(discount), "إجمالي البيع": str(final_total), "المسؤول": st.session_state.user}])
+                    sales_df = pd.concat([sales_df, new_s], ignore_index=True)
+                    sales_df.to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
+                    st.success("🎉 تم تسجيل وحفظ الفاتورة بنجاح في النظام! جاري تحضير الطباعة والتنزيل...")
+                    
+                    # توليد الثلاث نسخ في ملف وكود موحد لطباعتهم دفعة واحدة
+                    triple_html = generate_triple_invoice_html(inv_id, current_datetime_str, c_name, c_phone, c_address, sale_type, collect_system, collect_date, st.session_state.user, selected_item, qty, item_row['سعر البيع'], discount, final_total)
+                    
+                    # توفير رابط التحميل الفوري بضغطة واحدة مع تفعيل العرض المرئي للطباعة الآلية
+                    st.markdown(get_download_link(triple_html, f"الفاتورة_الثلاثية_{inv_id}.html"), unsafe_allow_html=True)
+                    st.markdown(triple_html, unsafe_allow_html=True)
+
+    # --- 7. صفحة البحث عن فواتير البيع وطباعتها ---
+    elif "البحث عن الفواتير وطباعتها" in choice:
+        st.header("🔎 نظام البحث والمراجعة وطباعة الفواتير")
+        if sales_df.empty: st.info("لا توجد فواتير مبيعات مسجلة في النظام حتى الآن.")
+        else:
+            search_query = st.text_input("ابحث عن فاتورة مبيعات (أدخل رقم الفاتورة، اسم العميل أو الهاتف)").strip()
+            if search_query:
+                filtered_sales = sales_df[sales_df['رقم الفاتورة'].str.contains(search_query, case=False, na=False) | sales_df['اسم العميل'].str.contains(search_query, case=False, na=False)]
+            else: filtered_sales = sales_df
+                
+            st.dataframe(filtered_sales, use_container_width=True)
+            
+            if not filtered_sales.empty:
+                selected_inv_id = st.selectbox("اختر رقم الفاتورة لإعادة الطباعة والسحب", filtered_sales['رقم الفاتورة'].unique())
+                f_row = sales_df[sales_df['رقم الفاتورة'] == selected_inv_id].iloc[0]
+                
+                match_inv_item = inv_df[inv_df['اسم الصنف'] == f_row['الصنف']]
+                unit_price = match_inv_item.iloc[0]['سعر البيع'] if not match_inv_item.empty else 0.0
+                
+                p_phone = f_row['هاتف العميل'] if 'هاتف العميل' in f_row else ""
+                p_sys = f_row['نظام التحصيل'] if 'نظام التحصيل' in f_row else "كاش"
+                p_date = f_row['تاريخ التحصيل'] if 'تاريخ التحصيل' in f_row else "فوراً"
+                p_time = f_row['التاريخ'] if 'التاريخ' in f_row else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                triple_html = generate_triple_invoice_html(f_row['رقم الفاتورة'], p_time, f_row['اسم العميل'], p_phone, f_row['العنوان'], f_row['نوع البيع'], p_sys, p_date, f_row['المسؤول'], f_row['الصنف'], int(f_row['الكمية']), unit_price, float(f_row['الخصم %']), float(f_row['إجمالي البيع']))
+                st.markdown(get_download_link(triple_html, f"إعادة_طباعة_فاتورة_{selected_inv_id}.html"), unsafe_allow_html=True)
+                st.markdown(triple_html, unsafe_allow_html=True)
+
+    # --- 8. صفحة التقارير ---
+    elif "تقارير البيع والشراء" in choice:
+        st.header(f"📈 التقارير المالية التفصيلية لـ {SHOWROOM_NAME}")
+        s_sum = pd.to_numeric(sales_df['إجمالي البيع'], errors='coerce').sum()
+        e_sum = pd.to_numeric(exp_df['المبلغ'], errors='coerce').sum()
+        st.metric("إجمالي مبيعات النظام", f"{s_sum:,.2f} جنيه")
         st.dataframe(sales_df, use_container_width=True)
+
+    # --- 9. صفحة المصاريف ---
+    elif "المصاريف" in choice:
+        st.header("💸 تسجيل المصاريف الإدارية والعمومية")
+        st.dataframe(exp_df, use_container_width=True)
+        b1 = st.text_input("بيان الصرف")
+        b2 = st.number_input("المبلغ المنصرف", min_value=0.0, step=10.0)
+        if st.button("حفظ المصروف"):
+            if b1 and b2 > 0:
+                new_e = pd.DataFrame([{"التاريخ": datetime.now().strftime("%Y-%m-%d"), "البيان": b1, "المبلغ": b2, "المسؤول": st.session_state.user}])
+                exp_df = pd.concat([exp_df, new_e], ignore_index=True)
+                exp_df.to_csv(EXPENSES_FILE, index=False, encoding='utf-8-sig')
+                st.success("✅ تم حفظ البند مصروفات!")
+                st.rerun()
+
+    # --- 10. الحضور والانصراف ---
+    elif "الحضور والانصراف" in choice:
+        st.header("⏰ تسجيل حضور وانصراف موظفي المعرض")
+        st.dataframe(att_df, use_container_width=True)
+
+    # --- 11. صفحة إدارة وتعديل الصلاحيات ---
+    elif "إدارة وتعديل الصلاحيات" in choice:
+        st.header("⚙️ إدارة الصلاحيات وحسابات الموظفين")
+        u_df = pd.read_csv(USERS_FILE, dtype=str)
+        st.dataframe(u_df, use_container_width=True)
+
+    # --- 12. صفحة إعدادات بيانات الفاتورة والدعم ---
+    elif "إعدادات بيانات الفاتورة والدعم" in choice:
+        st.header("⚙️ تحديث وإعداد بيانات طباعة الفاتورة والدعم")
+        with st.form("settings_form_updated"):
+            new_showroom_name = st.text_input("اسم المعرض / الشركة بالفاتورة", value=SHOWROOM_NAME)
+            new_showroom_address = st.text_input("العنوان بالتفصيل بالفاتورة", value=SHOWROOM_ADDRESS)
+            new_inquiry_number = st.text_input("رقم الدعم الفني للفواتير", value=SHOWROOM_ADDRESS)
+            if st.form_submit_button("💾 حفظ وتحديث الإعدادات"):
+                updated_settings = pd.DataFrame([{"اسم المعرض": new_showroom_name, "العنوان": new_showroom_address, "رقم الدعم": new_inquiry_number}])
+                updated_settings.to_csv(SETTINGS_FILE, index=False, encoding='utf-8-sig')
+                st.success("🚀 تم تحديث بيانات الفاتورة بنجاح!")
+                st.rerun()
