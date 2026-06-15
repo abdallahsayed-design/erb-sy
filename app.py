@@ -76,7 +76,7 @@ def init_files():
         pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "اسم العميل", "هاتف العميل", "العنوان", "نوع البيع", "نظام التحصيل", "تاريخ التحصيل", "الصنف", "الكمية", "الخصم %", "إجمالي البيع", "تكلفة الشراء الإجمالية", "صافي ربح الفاتورة", "المسؤول"]).to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
         
     if not os.path.exists(PURCHASES_FILE):
-        pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "المورد", "الصنف", "سعر الشراء المعتمد", "الكمية", "إجمالي الشراء", "المسؤول"]).to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
+        pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "المورد", "الصنف", "سعر الشراء المعتمد", "الالكمية", "إجمالي الشراء", "المسؤول"]).to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
         
     if not os.path.exists(EXPENSES_FILE):
         pd.DataFrame(columns=["التاريخ", "البيان", "المبلغ", "المسؤول"]).to_csv(EXPENSES_FILE, index=False, encoding='utf-8-sig')
@@ -282,6 +282,7 @@ else:
     if "إدارة الأصناف والمخزن" in choice:
         st.header("📦 إدارة وتكويد أصناف المخزن")
         
+        # استخدام التبويبات Tabs للسماح بالعمل على أكثر من ميزة دون مغادرة الصفحة
         t_view, t_add, t_edit, t_delete = st.tabs(["📋 استعراض المنتجات", "➕ تكويد صنف جديد", "✏️ تعديل أسعار صنف", "❌ حذف صنف من النظام"])
         
         with t_view:
@@ -386,6 +387,7 @@ else:
                 vendor = c1.selectbox("المورد", m_list)
                 item = c2.selectbox("الصنف المشترى", inv_df['اسم الصنف'].unique())
                 
+                # جلب السعر الافتراضي من جدول التكويد والسماح بتعديله للفاتورة الحالية
                 default_pur_price = float(inv_df[inv_df['اسم الصنف'] == item].iloc[0]['سعر الشراء'])
                 actual_purchase_price = c3.number_input("سعر الشراء المعتمد لهذه الفاتورة", value=default_pur_price, min_value=0.0)
                 qty = c4.number_input("الكمية المشتراة", min_value=1, step=1)
@@ -474,6 +476,7 @@ else:
             discount_amount = subtotal * (discount / 100)
             final_total = subtotal - discount_amount
             
+            # حساب الأرباح التقديرية للفاتورة الحالية بناءً على سعر الشراء الفعلي التكويدي
             cost_basis = float(item_row['سعر الشراء']) * qty
             profit_basis = final_total - cost_basis
             
@@ -527,118 +530,163 @@ else:
                 st.markdown(get_download_link(triple_html, f"إعادة_طباعة_فاتورة_{selected_inv_id}.html"), unsafe_allow_html=True)
                 st.markdown(triple_html, unsafe_allow_html=True)
 
-    # --- 8. صفحة التقارير المالية المتكاملة والأرباح ---
+    # --- 8. صفحة التقارير المالية المتكاملة (الصافي + تقارير المبيعات والمشتريات الشاملة) ---
     elif "تقارير البيع والشراء والأرباح" in choice:
         st.header(f"📈 التقارير المالية التفصيلية وحساب الأرباح لـ {SHOWROOM_NAME}")
         
+        # تحويل الأعمدة إلى قيم رقمية لمعالجة العمليات الحسابية بدقة وعرضها
         total_sales = pd.to_numeric(sales_df['إجمالي البيع'], errors='coerce').sum()
         total_purchases = pd.to_numeric(purchases_df['إجمالي الشراء'], errors='coerce').sum()
         total_expenses = pd.to_numeric(exp_df['المبلغ'], errors='coerce').sum()
-        gross_profits = pd.to_numeric(sales_df['صافي ربح الفاتورة'], errors='coerce').sum()
-        net_profits = gross_profits - total_expenses
         
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("💰 إجمالي المبيعات", f"{total_sales:,.2f} ج.م")
-        col2.metric("📥 إجمالي المشتريات", f"{total_purchases:,.2f} ج.م")
-        col3.metric("💸 إجمالي المصاريف", f"{total_expenses:,.2f} ج.م")
-        col4.metric("📊 مجمل الربح التجاري", f"{gross_profits:,.2f} ج.م")
-        col5.metric("🚀 صافي الأرباح النهائي", f"{net_profits:,.2f} ج.م")
+        # حساب صافي الربح الفعلي = (إجمالي سعر البيع الفعلي المحصل - تكلفة الشراء الأصلية لتلك البضائع المبيوعة) - المصاريف العمومية
+        total_sales_cost = pd.to_numeric(sales_df['تكلفة الشراء الإجمالية'], errors='coerce').sum() if 'تكلفة الشراء الإجمالية' in sales_df else 0.0
+        net_profit_actual = total_sales - total_sales_cost - total_expenses
         
-        st.subheader("📋 سجل المبيعات الشامل")
-        st.dataframe(sales_df, use_container_width=True)
-        st.subheader("📋 سجل المشتريات الشامل")
-        st.dataframe(purchases_df, use_container_width=True)
+        # عرض الكروت الرقمية الذكية للمؤشرات الرئيسية
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("💰 إجمالي إيراد المبيعات", f"{total_sales:,.2f} جنيه")
+        m2.metric("📥 إجمالي فواتير المشتريات والوارد", f"{total_purchases:,.2f} جنيه")
+        m3.metric("💸 إجمالي المصاريف العمومية", f"{total_expenses:,.2f} جنيه")
+        m4.metric("📊 الصافي الحقيقي للأرباح الدقيقة", f"{net_profit_actual:,.2f} جنيه")
+        
+        st.markdown("---")
+        
+        # التبويبات لعرض التقارير التفصيلية المبيعات والمشتريات مع إمكانية التصفية والسحب
+        t_sales_rep, t_purchases_rep = st.tabs(["📋 تقرير حركة المبيعات الشامل", "📋 تقرير حركة المشتريات الشامل"])
+        
+        with t_sales_rep:
+            st.subheader("سجل المبيعات الصادرة")
+            st.dataframe(sales_df, use_container_width=True)
+            if not sales_df.empty:
+                out_sales = BytesIO()
+                with pd.ExcelWriter(out_sales, engine='xlsxwriter') as wr:
+                    sales_df.to_excel(wr, index=False, sheet_name='المبيعات')
+                st.download_button("📥 تحميل تقرير المبيعات بصيغة Excel", data=out_sales.getvalue(), file_name="تقرير_المبيعات_الشامل.xlsx", mime="application/vnd.ms-excel")
+                
+        with t_purchases_rep:
+            st.subheader("سجل حركة المشتريات الواردة")
+            st.dataframe(purchases_df, use_container_width=True)
+            if not purchases_df.empty:
+                out_pur = BytesIO()
+                with pd.ExcelWriter(out_pur, engine='xlsxwriter') as wr:
+                    purchases_df.to_excel(wr, index=False, sheet_name='المشتريات')
+                st.download_button("📥 تحميل تقرير المشتريات بصيغة Excel", data=out_pur.getvalue(), file_name="تقرير_المشتريات_الشامل.xlsx", mime="application/vnd.ms-excel")
 
-    # --- 9. صفحة إدارة المصاريف التشغيلية ---
+    # --- 9. صفحة المصاريف ---
     elif "المصاريف" in choice:
-        st.header("💸 تسجيل وضبط المصاريف التشغيلية والنثريات")
+        st.header("💸 تسجيل المصاريف الإدارية والعمومية")
         st.dataframe(exp_df, use_container_width=True)
-        
-        c1, c2 = st.columns(2)
-        exp_title = c1.text_input("بيان المصروف (السبب)")
-        exp_amount = c2.number_input("المبلغ المدفوع", min_value=0.0, step=10.0)
-        
-        if st.button("تأكيد وحفظ المصروف"):
-            if exp_title and exp_amount > 0:
-                new_exp = pd.DataFrame([{"التاريخ": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "البيان": exp_title, "المبلغ": exp_amount, "المسؤول": st.session_state.user}])
-                exp_df = pd.concat([exp_df, new_exp], ignore_index=True)
+        b1 = st.text_input("بيان الصرف")
+        b2 = st.number_input("المبلغ المنصرف", min_value=0.0, step=10.0)
+        if st.button("حفظ المصروف"):
+            if b1 and b2 > 0:
+                new_e = pd.DataFrame([{"التاريخ": datetime.now().strftime("%Y-%m-%d"), "البيان": b1, "المبلغ": b2, "المسؤول": st.session_state.user}])
+                exp_df = pd.concat([exp_df, new_e], ignore_index=True)
                 exp_df.to_csv(EXPENSES_FILE, index=False, encoding='utf-8-sig')
-                st.success("✅ تم تسجيل المصروف الإداري بنجاح!")
+                st.success("✅ تم حفظ البند مصروفات!")
                 st.rerun()
 
-    # --- 10. صفحة الحضور والانصراف للموظفين ---
+    # --- 10. الحضور والانصراف ---
     elif "الحضور والانصراف" in choice:
-        st.header("⏰ مراقبة ونظام تسجيل الحضور والانصراف")
-        st.dataframe(att_df, use_container_width=True)
+        st.header("⏰ نظام تسجيل الحضور والانصراف")
+        st.subheader(f"المستخدم الحالي: ({st.session_state.user})")
+        col_att1, col_att2 = st.columns(2)
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        current_time = datetime.now().strftime("%H:%M:%S")
         
-        c1, c2 = st.columns(2)
-        action_type = c1.selectbox("نوع الحركة اليومية", ["تسجيل حضور للعمل", "تسجيل انصراف مغادرة"])
-        
-        if st.button("حفظ حركة الوقت الحالية"):
-            current_date = datetime.now().strftime("%Y-%m-%d")
-            current_time = datetime.now().strftime("%H:%M:%S")
-            
-            if action_type == "تسجيل حضور للعمل":
-                new_att = pd.DataFrame([{"الموظف": st.session_state.user, "التاريخ": current_date, "وقت الحضور": current_time, "وقت الانصراف": "لم ينصرف بعد"}])
-                att_df = pd.concat([att_df, new_att], ignore_index=True)
+        if col_att1.button("🟢 تسجيل حركة حضور الآن", use_container_width=True):
+            match = att_df[(att_df["الموظف"] == st.session_state.user) & (att_df["التاريخ"] == current_date)]
+            if not match.empty: st.warning("⚠️ أنت مسجل حضور بالفعل لهذا اليوم!")
             else:
-                idx = att_df[(att_df['الموظف'] == st.session_state.user) & (att_df['التاريخ'] == current_date)].index
-                if not idx.empty:
-                    att_df.at[idx[0], "وقت الانصراف"] = current_time
-                else:
-                    new_att = pd.DataFrame([{"الموظف": st.session_state.user, "التاريخ": current_date, "وقت الحضور": "لم يسجل حضور", "وقت الانصراف": current_time}])
-                    att_df = pd.concat([att_df, new_att], ignore_index=True)
-                    
-            att_df.to_csv(ATTENDANCE_FILE, index=False, encoding='utf-8-sig')
-            st.success(f"⏰ تم تسجيل الحركة بنجاح في تمام الساعة: {current_time}")
-            st.rerun()
+                new_attendance = pd.DataFrame([{"الموظف": st.session_state.user, "التاريخ": current_date, "وقت الحضور": current_time, "وقت الانصراف": "لم ينصرف بعد"}])
+                att_df = pd.concat([att_df, new_attendance], ignore_index=True)
+                att_df.to_csv(ATTENDANCE_FILE, index=False, encoding='utf-8-sig')
+                st.success(f"🎉 تم تسجيل الحضور بنجاح عند الساعة: {current_time}")
+                st.rerun()
+                
+        if col_att2.button("🔴 تسجيل حركة انصراف الآن", use_container_width=True):
+            idx_match = att_df[(att_df["الموظف"] == st.session_state.user) & (att_df["التاريخ"] == current_date)].index
+            if len(idx_match) > 0:
+                att_df.at[idx_match[0], "وقت الانصراف"] = current_time
+                att_df.to_csv(ATTENDANCE_FILE, index=False, encoding='utf-8-sig')
+                st.success(f"🚀 تم تسجيل الانصراف بنجاح عند الساعة: {current_time}")
+                st.rerun()
+            else: st.error("❌ لم يتم العثور على حركة حضور مسجلة لك اليوم لتسجيل الانصراف عليها!")
 
-    # --- 11. صفحة إدارة الحسابات وتعديل الصلاحيات الفورية ---
-    elif "إدارة وتعديل الصلاحيات والحسابات" in choice:
-        st.header("⚙️ إدارة وتعديل حسابات النظام وصلاحيات الصفحات")
+        st.markdown("---")
+        st.dataframe(att_df, use_container_width=True)
+
+    # --- 11. صفحة إدارة الصلاحيات (تتضمن بند تعديل وحذف اليوزرات بالكامل وبأمان) ---
+    elif "إدارة وتعديل الصلاحيات" in choice:
+        st.header("⚙️ لوحة التحكم في الحسابات وصلاحيات الوصول")
+        tab_users, tab_roles = st.tabs(["👤 إدارة وتعديل وحذف الحسابات", "🔒 تفعيل وإخفاء صلاحيات الصفحات"])
         
-        t_users, t_perms = st.tabs(["👥 الحسابات والمستخدمين", "🔐 مصفوفة الصلاحيات الأمانية"])
-        
-        with t_users:
-            u_df = pd.read_csv(USERS_FILE)
+        with tab_users:
+            u_df = pd.read_csv(USERS_FILE, dtype=str)
+            st.subheader("المستخدمون المقيدون بالنظام حالياً")
             st.dataframe(u_df, use_container_width=True)
             
-            st.subheader("➕ إضافة حساب موظف جديد")
-            uc1, uc2, uc3 = st.columns(3)
-            new_u = uc1.text_input("اسم المستخدم الجديد").strip()
-            new_p = uc2.text_input("كلمة المرور الجديدة").strip()
-            new_r = uc3.selectbox("الرتبة / الدور الوظيفي", ["مدير", "مشرف", "موظف"])
+            st.markdown("---")
+            uc1, uc2 = st.columns(2)
             
-            if st.button("حفظ واصدار الحساب الجديد"):
-                if new_u and new_p:
-                    if new_u in u_df['username'].astype(str).values: st.error("❌ اسم المستخدم هذا موجود مسبقاً!")
-                    else:
-                        u_df = pd.concat([u_df, pd.DataFrame([{"username": new_u, "password": new_p, "role": new_r}])], ignore_index=True)
+            with uc1:
+                st.subheader("➕ إضافة حساب مستخدم جديد")
+                new_username = st.text_input("اسم المستخدم الجديد").strip()
+                new_password = st.text_input("كلمة مرور الحساب الجديدة").strip()
+                new_role = st.selectbox("الصلاحية الممنوحة", ["مدير", "مشرف", "موظف"])
+                if st.button("➕ حفظ وإنشاء المستخدم"):
+                    if new_username and new_password:
+                        if new_username in u_df["username"].values: st.error("❌ اسم المستخدم مسجل مسبقاً!")
+                        else:
+                            new_acc = pd.DataFrame([{"username": new_username, "password": new_password, "role": new_role}])
+                            u_df = pd.concat([u_df, new_acc], ignore_index=True)
+                            u_df.to_csv(USERS_FILE, index=False, encoding='utf-8-sig')
+                            st.success(f"🎉 تم إنشاء الحساب بنجاح!")
+                            st.rerun()
+
+            with uc2:
+                st.subheader("🛠️ تعديل أو حذف مستخدم حالي")
+                if len(u_df) > 0:
+                    target_user = st.selectbox("اختر الحساب المراد تعديله أو حذفه", u_df["username"].values)
+                    target_idx = u_df[u_df["username"] == target_user].index[0]
+                    
+                    edit_pw = st.text_input("تعديل كلمة المرور", value=u_df.at[target_idx, "password"])
+                    edit_role = st.selectbox("تعديل الرتبة", ["مدير", "مشرف", "موظف"], index=["مدير", "مشرف", "موظف"].index(u_df.at[target_idx, "role"]))
+                    
+                    col_b1, col_b2 = st.columns(2)
+                    if col_b1.button("💾 حفظ التعديلات للحساب"):
+                        u_df.at[target_idx, "password"] = edit_pw
+                        u_df.at[target_idx, "role"] = edit_role
                         u_df.to_csv(USERS_FILE, index=False, encoding='utf-8-sig')
-                        st.success("🎉 تم إنشاء الحساب بنجاح!")
+                        st.success("✅ تم تحديث بيانات المستخدم!")
                         st.rerun()
                         
-        with t_perms:
-            st.subheader("تعديل الصلاحيات فورياً لكل الرتب والوظائف")
-            edited_perms = st.data_editor(perms_df, use_container_width=True)
-            if st.button("💾 حفظ تعديلات مصفوفة الصلاحيات فوراً"):
-                edited_perms.to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
-                st.success("✅ تم تحديث جدول صلاحيات الأقسام بنجاح!")
+                    if col_b2.button("🗑️ حذف هذا الحساب نهائياً"):
+                        if target_user == "admin": st.error("❌ لا يمكن حذف الحساب الإداري الرئيسي (admin) لمنع قفل النظام!")
+                        else:
+                            u_df = u_df[u_df["username"] != target_user]
+                            u_df.to_csv(USERS_FILE, index=False, encoding='utf-8-sig')
+                            st.success("🗑️ تم حذف الحساب من السجلات بنجاح!")
+                            st.rerun()
+
+        with tab_roles:
+            st.subheader("🔑 جدول التحكم التفاعلي بالصفحات")
+            edited_perms_df = st.data_editor(perms_df, use_container_width=True, disabled=["اسم الصفحة"])
+            if st.button("💾 حفظ الصلاحيات والتعديلات الجديدة"):
+                edited_perms_df.to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
+                st.success("🚀 تم تحديث قواعد الصلاحيات!")
                 st.rerun()
 
     # --- 12. صفحة إعدادات بيانات الفاتورة والدعم ---
     elif "إعدادات بيانات الفاتورة والدعم" in choice:
-        st.header("⚙️ إعدادات بيانات المعرض والفاتورة")
-        
-        set_df = pd.read_csv(SETTINGS_FILE)
-        
-        sc1, sc2, sc3 = st.columns(3)
-        new_name = sc1.text_input("اسم المعرض", value=set_df.iloc[0]["اسم المعرض"])
-        new_address = sc2.text_input("العنوان بالتفصيل", value=set_df.iloc[0]["العنوان"])
-        new_phone = sc3.text_input("رقم الدعم والاستعلام بالفاتورة", value=set_df.iloc[0]["رقم الدعم"])
-        
-        if st.button("💾 حفظ الإعدادات الأساسية"):
-            updated_settings = pd.DataFrame([{"اسم المعرض": new_name, "العنوان": new_address, "رقم الدعم": new_phone}])
-            updated_settings.to_csv(SETTINGS_FILE, index=False, encoding='utf-8-sig')
-            st.success("✅ تم تحديث بيانات النظام والفواتير بنجاح! يرجى إعادة تحميل الصفحة لتطبيق التغييرات الكاملة.")
-            st.rerun()
+        st.header("⚙️ تحديث وإعداد بيانات طباعة الفاتورة والدعم")
+        with st.form("settings_form_updated"):
+            new_showroom_name = st.text_input("اسم المعرض / الشركة بالفاتورة", value=SHOWROOM_NAME)
+            new_showroom_address = st.text_input("العنوان بالتفصيل بالفاتورة", value=SHOWROOM_ADDRESS)
+            new_inquiry_number = st.text_input("رقم الدعم الفني للفواتير", value=INQUIRY_NUMBER)
+            if st.form_submit_button("💾 حفظ وتحديث الإعدادات"):
+                updated_settings = pd.DataFrame([{"اسم المعرض": new_showroom_name, "العنوان": new_showroom_address, "رقم الدعم": new_inquiry_number}])
+                updated_settings.to_csv(SETTINGS_FILE, index=False, encoding='utf-8-sig')
+                st.success("🚀 تم تحديث بيانات الفاتورة بنجاح!")
+                st.rerun()
