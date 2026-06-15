@@ -120,7 +120,7 @@ if 'user' not in st.session_state: st.session_state.user = ""
 if 'role' not in st.session_state: st.session_state.role = "موظف"
 if 'cart' not in st.session_state: st.session_state.cart = []
 
-def generate_triple_invoice_html(inv_id, datetime_str, client_name, phone, address, pay_type, collect_system, collect_date, user, cart_items):
+def generate_triple_invoice_html(inv_id, datetime_str, client_name, phone, address, pay_type, collect_system, collect_date, user, cart_items, sh_name, sh_address, sh_phone):
     collect_info = f"<tr><td><b>نظام التحصيل:</b> {collect_system}</td><td><b>تاريخ التحصيل:</b> {collect_date}</td></tr>" if pay_type == "آجل (على الحساب)" else ""
     
     total_invoice_amount = sum(item['final_total'] for item in cart_items)
@@ -169,9 +169,9 @@ def generate_triple_invoice_html(inv_id, datetime_str, client_name, phone, addre
         <div class="invoice-page">
             <div class="invoice-header">
                 <h3>📋 نسخة العميل (أصل الفاتورة)</h3>
-                <h1>🏢 {SHOWROOM_NAME}</h1>
-                <p>العنوان: {SHOWROOM_ADDRESS}</p>
-                <p style="font-size: 12px; font-weight: bold;">📞 رقم الاستعلام والدعم: {INQUIRY_NUMBER}</p>
+                <h1>🏢 {sh_name}</h1>
+                <p>العنوان: {sh_address}</p>
+                <p style="font-size: 12px; font-weight: bold;">📞 رقم الاستعلام والدعم: {sh_phone}</p>
             </div>
             <table class="invoice-details-table">
                 <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ والوقت:</b> {datetime_str}</td></tr>
@@ -191,8 +191,8 @@ def generate_triple_invoice_html(inv_id, datetime_str, client_name, phone, addre
         <div class="invoice-page">
             <div class="invoice-header">
                 <h3>📋 نسخة الإدارة المالية والحسابات</h3>
-                <h1>🏢 {SHOWROOM_NAME}</h1>
-                <p>العنوان: {SHOWROOM_ADDRESS}</p>
+                <h1>🏢 {sh_name}</h1>
+                <p>العنوان: {sh_address}</p>
             </div>
             <table class="invoice-details-table">
                 <tr><td><b>رقم الفاتورة:</b> {inv_id}</td><td><b>التاريخ والوقت:</b> {datetime_str}</td></tr>
@@ -211,7 +211,7 @@ def generate_triple_invoice_html(inv_id, datetime_str, client_name, phone, addre
         <div class="invoice-page">
             <div class="invoice-header">
                 <h3>📦 نسخة مسؤول المخازن والصرف</h3>
-                <h1>🏢 {SHOWROOM_NAME}</h1>
+                <h1>🏢 {sh_name}</h1>
                 <p>التوجيه: يرجى صرف الأصناف المبينة أدناه لمستلم الفاتورة</p>
             </div>
             <table class="invoice-details-table">
@@ -412,7 +412,7 @@ else:
                         
         with t_manage:
             st.subheader("⚙️ مراجعة وتعديل وحذف فواتير الشراء السابقة")
-            if purchases_df.empty: st.info("لا توجد فواتير شراء مسجلة حالياً.")
+            if purchases_df.empty: St.info("لا توجد فواتير شراء مسجلة حالياً.")
             else:
                 st.dataframe(purchases_df, use_container_width=True)
                 target_pur_id = st.selectbox("اختر رقم فاتورة الشراء للإجراء", purchases_df["رقم الفاتورة"].unique())
@@ -431,7 +431,7 @@ else:
                     st.success("🔥 تم حذف فاتورة الشراء وتعديل رصيد المخزن!")
                     st.rerun()
 
-    # --- 6. صفحة المبيعات المطورة (دعم سلة متعددة الأصناف + الربط بالكود) ---
+    # --- 6. صفحة المبيعات المطورة ---
     elif "حركة فواتير البيع" in choice:
         st.header(f"📤 إنشاء فاتورة مبيعات جديدة - {SHOWROOM_NAME}")
         if inv_df.empty: st.warning("⚠️ المخزن فارغ.")
@@ -468,7 +468,7 @@ else:
             
             st.markdown("### 🛒 إضافة المنتجات إلى السلة")
             c5, c6, c7 = st.columns(3)
-            selected_item_code = c5.selectbox("اختر المنتج بال كود", inv_df['كود الصنف'].values, format_func=lambda x: f"{x} - {inv_df[inv_df['كود الصنف']==x]['اسم الصنف'].values[0]}")
+            selected_item_code = c5.selectbox("اختر المنتج بالكود", inv_df['كود الصنف'].values, format_func=lambda x: f"{x} - {inv_df[inv_df['كود الصنف']==x]['اسم الصنف'].values[0]}")
             qty = c6.number_input("الكمية المطلوبة", min_value=1, step=1)
             
             discount = 0.0
@@ -487,7 +487,6 @@ else:
             st.warning(f"📊 المتوفر بالمخزن: {item_row['الكمية']} | الصافي لهذا الصنف: {final_total} جنيه")
             
             if st.button("➕ إضافة المنتج الحالي للسلة"):
-                # التحقق من عدم تجاوز الكمية المتاحة بالمخزن مع مراعاة ما أضيف مسبقاً للسلة
                 already_in_cart = sum(item['qty'] for item in st.session_state.cart if item['item_code'] == selected_item_code)
                 if int(item_row['الكمية']) < (qty + already_in_cart):
                     st.error("❌ الكمية المطلوبة غير متوفرة بالمخزن!")
@@ -503,8 +502,8 @@ else:
                         "profit_basis": profit_basis
                     })
                     st.success(f"🎉 تم إضافة {item_row['اسم الصنف']} إلى السلة!")
+                    st.rerun()
             
-            # عرض محتويات السلة الحالية
             if st.session_state.cart:
                 st.markdown("#### 📄 محتويات السلة الحالية:")
                 cart_df = pd.DataFrame(st.session_state.cart)
@@ -521,14 +520,11 @@ else:
                         inv_id = "INV-" + str(int(datetime.now().timestamp()))
                         current_datetime_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         
-                        # تحديث المخزن وحفظ العمليات
                         new_sales_entries = []
                         for item in st.session_state.cart:
-                            # خصم المخزن
                             idx = inv_df[inv_df['كود الصنف'] == item['item_code']].index[0]
                             inv_df.at[idx, 'الكمية'] = int(inv_df.at[idx, 'الكمية']) - item['qty']
                             
-                            # تجهيز سجل المبيعات لكل حركة
                             new_sales_entries.append({
                                 "رقم الفاتورة": inv_id,
                                 "التاريخ": current_datetime_str,
@@ -555,14 +551,13 @@ else:
                         
                         st.success("🎉 تم تسجيل وحفظ الفاتورة بالكامل بنجاح في النظام!")
                         
-                        triple_html = generate_triple_invoice_html(inv_id, current_datetime_str, c_name, c_phone, c_address, sale_type, collect_system, collect_date, st.session_state.user, st.session_state.cart)
+                        triple_html = generate_triple_invoice_html(inv_id, current_datetime_str, c_name, c_phone, c_address, sale_type, collect_system, collect_date, st.session_state.user, st.session_state.cart, SHOWROOM_NAME, SHOWROOM_ADDRESS, INQUIRY_NUMBER)
                         st.markdown(get_download_link(triple_html, f"الفاتورة_الثلاثية_{inv_id}.html"), unsafe_allow_html=True)
                         st.markdown(triple_html, unsafe_allow_html=True)
                         
-                        # تصفير السلة بعد النجاح
                         st.session_state.cart = []
 
-    # --- 7. صفحة البحث عن فواتير البيع وطباعتها (تجميع أصناف الفاتورة) ---
+    # --- 7. صفحة البحث عن فواتير البيع وطباعتها ---
     elif "البحث عن الفواتير وطباعتها" in choice:
         st.header("🔎 نظام البحث والمراجعة وطباعة الفواتير")
         if sales_df.empty: st.info("لا توجد فواتير مبيعات مسجلة في النظام حتى الآن.")
@@ -577,7 +572,6 @@ else:
             if not filtered_sales.empty:
                 selected_inv_id = st.selectbox("اختر رقم الفاتورة لإعادة الطباعة والسحب", filtered_sales['رقم الفاتورة'].unique())
                 
-                # تجميع كافة العناصر التابعة لرقم هذه الفاتورة المحددة
                 invoice_rows = sales_df[sales_df['رقم الفاتورة'] == selected_inv_id]
                 f_row = invoice_rows.iloc[0]
                 
@@ -596,7 +590,7 @@ else:
                 p_date = f_row['تاريخ التحصيل'] if 'تاريخ التحصيل' in f_row else "فوراً"
                 p_time = f_row['التاريخ'] if 'التاريخ' in f_row else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-                triple_html = generate_triple_invoice_html(selected_inv_id, p_time, f_row['اسم العميل'], p_phone, f_row['العنوان'], f_row['نوع البيع'], p_sys, p_date, f_row['المسؤول'], rebuild_cart)
+                triple_html = generate_triple_invoice_html(selected_inv_id, p_time, f_row['اسم العميل'], p_phone, f_row['العنوان'], f_row['نوع البيع'], p_sys, p_date, f_row['المسؤول'], rebuild_cart, SHOWROOM_NAME, SHOWROOM_ADDRESS, INQUIRY_NUMBER)
                 st.markdown(get_download_link(triple_html, f"إعادة_طباعة_فاتورة_{selected_inv_id}.html"), unsafe_allow_html=True)
                 st.markdown(triple_html, unsafe_allow_html=True)
 
@@ -684,7 +678,7 @@ else:
         st.dataframe(att_df, use_container_width=True)
 
     # --- 11. صفحة إدارة الصلاحيات ---
-    elif "إدارة وتعديل الصلاحيات" in choice:
+    elif "إدارة وتعديل الصلاحيات والحسابات" in choice:
         st.header("⚙️ لوحة التحكم في الحسابات وصلاحيات الوصول")
         tab_users, tab_roles = st.tabs(["👤 إدارة وتعديل وحذف الحسابات", "🔒 تفعيل وإخفاء صلاحيات الصفحات"])
         
