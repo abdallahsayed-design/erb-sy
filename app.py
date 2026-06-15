@@ -6,7 +6,7 @@ from datetime import datetime
 # إعدادات الصفحة والشكل العام
 st.set_page_config(page_title="نظام معرض الكبير لإدارة المخازن", layout="wide")
 
-# أسماء ملفات البيانات
+# أسماء ملفات البيانات (ثابتة ومحمية من الحذف)
 INVENTORY_FILE = "inventory_data.csv"
 USERS_FILE = "users_data.csv"
 SALES_FILE = "sales_data.csv"
@@ -14,36 +14,68 @@ PURCHASES_FILE = "purchases_data.csv"
 EXPENSES_FILE = "expenses_data.csv"
 ATTENDANCE_FILE = "attendance_data.csv"
 CONTACTS_FILE = "contacts_data.csv"
-PERMISSIONS_FILE = "permissions_config.csv"  # ملف التحكم في إظهار وإخفاء الصفحات
+PERMISSIONS_FILE = "permissions_config.csv" 
 
-# دالة تهيئة الملفات للتأكد من وجود البيانات والتهيئة الافتراضية
+# رقم استعلام الدعم الفني الثابت للفواتير
+INQUIRY_NUMBER = "0100XXXXXXX" 
+
+# دالة تهيئة الملفات للتأكد من وجود البيانات والتهيئة الافتراضية دون مسح القديم
 def init_files():
+    # الفحص لعدم تصفير البيانات القديمة في حال وجود الملفات مسبقاً
     if not os.path.exists(USERS_FILE):
         pd.DataFrame([
             {"username": "admin", "password": "123", "role": "مدير"},
             {"username": "sharaf", "password": "456", "role": "مشرف"},
             {"username": "user1", "password": "111", "role": "موظف"}
         ]).to_csv(USERS_FILE, index=False, encoding='utf-8-sig')
+        
     if not os.path.exists(INVENTORY_FILE):
         pd.DataFrame(columns=["كود الصنف", "اسم الصنف", "الكمية", "سعر الشراء", "سعر البيع"]).to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
+        
     if not os.path.exists(SALES_FILE):
         pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "اسم العميل", "العنوان", "نوع البيع", "الصنف", "الكمية", "الخصم %", "إجمالي البيع", "المسؤول"]).to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
+        
     if not os.path.exists(PURCHASES_FILE):
         pd.DataFrame(columns=["رقم الفاتورة", "التاريخ", "المورد", "الصنف", "الكمية", "إجمالي الشراء", "المسؤول"]).to_csv(PURCHASES_FILE, index=False, encoding='utf-8-sig')
+        
     if not os.path.exists(EXPENSES_FILE):
         pd.DataFrame(columns=["التاريخ", "البيان", "المبلغ", "المسؤول"]).to_csv(EXPENSES_FILE, index=False, encoding='utf-8-sig')
+        
     if not os.path.exists(ATTENDANCE_FILE):
         pd.DataFrame(columns=["الموظف", "التاريخ", "وقت الحضور", "وقت الانصراف"]).to_csv(ATTENDANCE_FILE, index=False, encoding='utf-8-sig')
+        
     if not os.path.exists(CONTACTS_FILE):
         pd.DataFrame(columns=["النوع", "الاسم", "الهاتف", "العنوان"]).to_csv(CONTACTS_FILE, index=False, encoding='utf-8-sig')
     
-    # تهيئة ملف الصلاحيات الافتراضية للصفحات (إظهار/إخفاء)
+    # تهيئة ملف الصلاحيات الافتراضية للأقسام والعمليات الحساسة (إظهار/إخفاء)
+    all_pages = [
+        "📦 تكويد الأصناف", "📊 رصيد أول المدة Excel", "🔍 حالة المخزن", 
+        "🤝 العملاء والموردين", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", 
+        "🔎 البحث عن الفواتير وطباعتها", "📈 تقارير البيع والشراء", "💸 المصاريف", 
+        "⏰ الحضور والانصراف", "⚙️ إدارة وتعديل الصلاحيات",
+        "✏️ تعديل الفواتير السابقة", "❌ حذف الفواتير السابقة" # الصلاحيات الجديدة المطلوبة
+    ]
+    
     if not os.path.exists(PERMISSIONS_FILE):
-        all_pages = ["📦 تكويد الأصناف", "📊 رصيد أول المدة Excel", "🔍 حالة المخزن", "🤝 العملاء والموردين", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "📈 تقارير البيع والشراء", "💸 المصاريف", "⏰ الحضور والانصراف", "⚙️ إدارة وتعديل الصلاحيات"]
         default_perms = []
         for page in all_pages:
-            default_perms.append({"اسم الصفحة": page, "مدير": True, "مشرف": True if page in ["🔍 حالة المخزن", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"] else False, "موظف": True if page in ["🔍 حالة المخزن", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"] else False})
+            default_perms.append({
+                "اسم الصفحة": page, 
+                "مدير": True, 
+                "مشرف": True if page in ["🔍 حالة المخزن", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"] else False, 
+                "موظف": True if page in ["🔍 حالة المخزن", "📤 فاتورة بيع جديدة", "🔎 البحث عن الفواتير وطباعتها", "⏰ الحضور والانصراف"] else False
+            })
         pd.DataFrame(default_perms).to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
+    else:
+        # إذا كان ملف الصلاحيات موجوداً، نضمن فقط إضافة الأسطر الجديدة دون مسح القديم
+        existing_perms = pd.read_csv(PERMISSIONS_FILE)
+        missing_pages = [p for p in all_pages if p not in existing_perms["اسم الصفحة"].values]
+        if missing_pages:
+            new_rows = []
+            for mp in missing_pages:
+                new_rows.append({"اسم الصفحة": mp, "مدير": True, "مشرف": False, "موظف": False})
+            updated_perms = pd.concat([existing_perms, pd.DataFrame(new_rows)], ignore_index=True)
+            updated_perms.to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
 
 init_files()
 
@@ -52,7 +84,7 @@ if 'auth' not in st.session_state: st.session_state.auth = False
 if 'user' not in st.session_state: st.session_state.user = ""
 if 'role' not in st.session_state: st.session_state.role = "موظف"
 
-# دالة لتوليد كود فاتورة بملف استايل مخصص للـ A5 والـ PDF
+# دالة لتوليد كود فاتورة بملف استايل مخصص للـ A5 مضافاً إليها رقم الاستعلام
 def generate_a5_html_invoice(copy_title, inv_id, date, client_name, address, pay_type, user, item, qty, price, discount, final_total):
     return f"""
     <div class="print-invoice-container">
@@ -80,6 +112,7 @@ def generate_a5_html_invoice(copy_title, inv_id, date, client_name, address, pay
             <h2>📋 {copy_title}</h2>
             <h1>🏢 معرض الكبير</h1>
             <p>العنوان: ابوحماد - قرية العراقي - بجوار مدرسة الشهيد صلاح فتحي</p>
+            <p style="font-size: 13px; color: blue; font-weight: bold;">📞 رقم الاستعلام والدعم: {INQUIRY_NUMBER}</p>
         </div>
         <hr style="border: 1px solid #000; margin: 5px 0;">
         <table class="invoice-details-table">
@@ -114,21 +147,21 @@ if not st.session_state.auth:
         else:
             st.error("بيانات الدخول خاطئة.")
 else:
-    # جلب الصلاحيات الحالية المخصصة لإظهار/إخفاء الصفحات
+    # جلب الصلاحيات الحالية المخصصة لإظهار/إخفاء الصفحات والعمليات
     perms_df = pd.read_csv(PERMISSIONS_FILE)
     current_role = st.session_state.role
     
-    # فلترة صفحات القائمة بناءً على إعدادات المدير الحالية في ملف الإعدادات
-    allowed_pages = perms_df[perms_df[current_role] == True]["اسم الصفحة"].tolist()
+    # فلترة الأقسام الظاهرة فقط في القائمة الجانبية (باستثناء بنود العمليات الداخلية مثل التعديل والحذف)
+    allowed_actions = perms_df[perms_df[current_role] == True]["اسم الصفحة"].tolist()
+    sidebar_pages = [p for p in allowed_actions if not p.startswith("✏️") and not p.startswith("❌")]
     
-    # تأمين ألا تفرغ القائمة تماماً
-    if not allowed_pages:
-        allowed_pages = ["🔍 حالة المخزن"]
+    if not sidebar_pages:
+        sidebar_pages = ["🔍 حالة المخزن"]
         
     st.sidebar.title(f"👤 {st.session_state.user}")
     st.sidebar.write(f"الرتبة: **{st.session_state.role}**")
     
-    choice = st.sidebar.selectbox("الانتقال إلى", allowed_pages)
+    choice = st.sidebar.selectbox("الانتقال إلى", sidebar_pages)
     
     if st.sidebar.button("تسجيل الخروج"):
         st.session_state.auth = False
@@ -283,9 +316,9 @@ else:
                         invoice_html = generate_a5_html_invoice(copy, inv_id, datetime.now().strftime("%Y-%m-%d"), c_name, c_address, sale_type, st.session_state.user, selected_item, qty, item_row['سعر البيع'], discount, final_total)
                         st.markdown(invoice_html, unsafe_allow_html=True)
 
-    # --- 7. صفحة البحث عن الفواتير وطباعتها ---
+    # --- 7. صفحة البحث عن الفواتير (ومزودة بخصائص التعديل والحذف بناءً على الصلاحية المخفية/المظهرة) ---
     elif "البحث عن الفواتير وطباعتها" in choice:
-        st.header("🔎 نظام البحث ومراجعة الفواتير السابقة وطباعتها (A5)")
+        st.header("🔎 نظام البحث والمراجعة والتحكم في الفواتير السابقة")
         if sales_df.empty:
             st.info("لا توجد فواتير مبيعات مسجلة في النظام حتى الآن.")
         else:
@@ -295,19 +328,52 @@ else:
             else:
                 filtered_sales = sales_df
                 
-            st.write(f"عدد الفواتير المكتشفة: {len(filtered_sales)}")
             st.dataframe(filtered_sales, use_container_width=True)
             
             if not filtered_sales.empty:
-                st.subheader("⚙️ اختر الفاتورة المراد إعادة عرضها وطباعتها كـ PDF مقاس A5:")
-                selected_inv_id = st.selectbox("اختر رقم الفاتورة", filtered_sales['رقم الفاتورة'].unique())
+                st.subheader("⚙️ الإجراءات المتاحة للفاتورة:")
+                selected_inv_id = st.selectbox("اختر رقم الفاتورة للمراجعة أو التعديل/الحذف", filtered_sales['رقم الفاتورة'].unique())
                 f_row = sales_df[sales_df['رقم الفاتورة'] == selected_inv_id].iloc[0]
                 
+                # إظهار أزرار التعديل والحذف فقط لمن يملك الصلاحية المظهرة من المدير
+                col_actions1, col_actions2 = st.columns(2)
+                
+                if "✏️ تعديل الفواتير السابقة" in allowed_actions:
+                    with col_actions1:
+                        with st.expander("✏️ تعديل بيانات هذه الفاتورة"):
+                            new_cust_name = st.text_input("تعديل اسم العميل", value=f_row['اسم العميل'])
+                            new_cust_addr = st.text_input("تعديل عنوان العميل", value=f_row['العنوان'])
+                            new_sale_type = st.selectbox("تعديل نوع البيع", ["نقدي (كاش)", "آجل (على الحساب)"], index=0 if f_row['نوع البيع']=="نقدي (كاش)" else 1)
+                            if st.button("💾 حفظ التعديلات الفورية للفاتورة"):
+                                idx = sales_df[sales_df['رقم الفاتورة'] == selected_inv_id].index[0]
+                                sales_df.at[idx, 'اسم العميل'] = new_cust_name
+                                sales_df.at[idx, 'العنوان'] = new_cust_addr
+                                sales_df.at[idx, 'نوع البيع'] = new_sale_type
+                                sales_df.to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
+                                st.success("🎉 تم تعديل الفاتورة بنجاح وثبات باقي البيانات!")
+                                st.rerun()
+                                
+                if "❌ حذف الفواتير السابقة" in allowed_actions:
+                    with col_actions2:
+                        if st.button("❌ حذف هذه الفاتورة نهائياً وإرجاع بضاعتها للمخزن", use_container_width=True):
+                            # إرجاع الكمية للمخزن أولاً لضمان دقة الرصيد
+                            match_item = f_row['الصنف']
+                            return_qty = int(f_row['الكمية'])
+                            if match_item in inv_df['اسم الصنف'].values:
+                                s_idx = inv_df[inv_df['اسم الصنف'] == match_item].index[0]
+                                inv_df.at[s_idx, 'الكمية'] = int(inv_df.at[s_idx, 'الكمية']) + return_qty
+                                inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
+                            
+                            # حذف الفاتورة
+                            sales_df = sales_df[sales_df['رقم الفاتورة'] != selected_inv_id]
+                            sales_df.to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
+                            st.success("🔥 تم حذف الفاتورة وإرجاع الكمية للمخزن بنجاح!")
+                            st.rerun()
+
+                st.markdown("---")
+                st.subheader(f"📄 معاينة الفاتورة الثلاثية (A5)")
                 match_inv_item = inv_df[inv_df['اسم الصنف'] == f_row['الصنف']]
                 unit_price = match_inv_item.iloc[0]['سعر البيع'] if not match_inv_item.empty else 0.0
-                
-                st.markdown("---")
-                st.subheader(f"📄 عرض الفاتورة رقم {selected_inv_id}")
                 
                 copies = ["نسخة العميل", "نسخة الإدارة المالية", "نسخة مسؤول المخازن"]
                 for copy in copies:
@@ -376,12 +442,12 @@ else:
                 st.success(f"📌 تم تسجيل انصرافك!")
                 st.rerun()
 
-    # --- 11. صفحة إدارة وتعديل الصلاحيات وإظهار/إخفاء الصفحات ---
+    # --- 11. صفحة إدارة وتعديل الصلاحيات وإظهار/إخفاء الصفحات والعمليات الحساسة ---
     elif "إدارة وتعديل الصلاحيات" in choice:
         st.header("⚙️ إدارة الصلاحيات وحسابات موظفي ومشرفي معرض الكبير")
         u_df = pd.read_csv(USERS_FILE, dtype=str)
         
-        tab_add, tab_edit, tab_visibility = st.tabs(["➕ إنشاء حساب جديد", "✏️ تعديل وحذف حساب", "⚙️ التحكم في إظهار وإخفاء الصفحات"])
+        tab_add, tab_edit, tab_visibility = st.tabs(["➕ إنشاء حساب جديد", "✏️ تعديل وحذف حساب", "⚙️ التحكم في إظهار وإخفاء الصفحات والعمليات"])
         
         with tab_add:
             st.subheader("👤 إضافة مستخدم جديد للنظام")
@@ -430,19 +496,17 @@ else:
                     st.rerun()
 
         with tab_visibility:
-            st.subheader("⚙️ إظهار وإخفاء الصفحات عن الرتب (مدير / مشرف / موظف)")
-            st.info("قم بتعديل الاختيارات أدناه للتحكم في الأقسام التي تظهر لكل رتبة في القائمة الجانبية فوراً:")
+            st.subheader("⚙️ التحكم في الصلاحيات (إظهار وإخفاء الصفحات والأزرار)")
+            st.info("الخيارات أدناه تمكنك من إخفاء أو إظهار القوائم أو العمليات مثل (تعديل وحذف الفواتير) عن رتب الموظفين والمشرفين فوراً:")
             
-            # عرض جدول الصلاحيات الحالي للتعديل
             updated_rows = []
             for idx, row in perms_df.iterrows():
-                st.markdown(f"**📑 قسم: {row['اسم الصفحة']}**")
+                st.markdown(f"**⚙️ {row['اسم الصفحة']}**")
                 col1, col2, col3 = st.columns(3)
                 
-                # المدير دائماً يملك الصلاحية لحماية النظام، ونعطي خيار التحكم في المشرف والموظف
-                m_perm = col1.checkbox("يظهر للمدير", value=bool(row['مدير']), key=f"p_dir_{idx}", disabled=True)
-                s_perm = col2.checkbox("يظهر للمشرف", value=bool(row['مشرف']), key=f"p_shرف_{idx}")
-                u_perm = col3.checkbox("يظهر للموظف", value=bool(row['موظف']), key=f"p_user_{idx}")
+                m_perm = col1.checkbox("تفعيل للمدير", value=bool(row['مدير']), key=f"p_dir_{idx}", disabled=True)
+                s_perm = col2.checkbox("تفعيل للمشرف", value=bool(row['مشرف']), key=f"p_shرف_{idx}")
+                u_perm = col3.checkbox("تفعيل للموظف", value=bool(row['موظف']), key=f"p_user_{idx}")
                 
                 updated_rows.append({
                     "اسم الصفحة": row['اسم الصفحة'],
@@ -452,8 +516,8 @@ else:
                 })
                 st.markdown("---")
                 
-            if st.button("💾 حفظ خريطة الصلاحيات الجديدة وتحديث النظام", use_container_width=True):
+            if st.button("💾 حفظ خريطة الصلاحيات وتحديث النظام الحالية", use_container_width=True):
                 new_perms_df = pd.DataFrame(updated_rows)
                 new_perms_df.to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
-                st.success("🚀 تم تحديث الصلاحيات وإظهار/إخفاء الصفحات بنجاح!")
+                st.success("🚀 تم تحديث الصلاحيات وعمليات الفواتير بنجاح دون أي مساس بالبيانات القديمة!")
                 st.rerun()
