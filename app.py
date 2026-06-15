@@ -16,7 +16,7 @@ ATTENDANCE_FILE = "attendance_data.csv"
 CONTACTS_FILE = "contacts_data.csv"
 PERMISSIONS_FILE = "permissions_config.csv" 
 
-# رقم استعلام الدعم الفني الثابت للفواتير
+# رقم استعلام الدعم الفني الثابت للفواتير (يمكنك تغييره من هنا مباشرة)
 INQUIRY_NUMBER = "0100XXXXXXX" 
 
 # دالة تهيئة الملفات للتأكد من وجود البيانات والتهيئة الافتراضية دون مسح القديم
@@ -53,7 +53,7 @@ def init_files():
         "🤝 العملاء والموردين", "📥 فاتورة شراء جديدة", "📤 فاتورة بيع جديدة", 
         "🔎 البحث عن الفواتير وطباعتها", "📈 تقارير البيع والشراء", "💸 المصاريف", 
         "⏰ الحضور والانصراف", "⚙️ إدارة وتعديل الصلاحيات",
-        "✏️ تعديل الفواتير السابقة", "❌ حذف الفواتير السابقة" # الصلاحيات الجديدة المطلوبة
+        "✏️ تعديل الفواتير السابقة", "❌ حذف الفواتير السابقة" 
     ]
     
     if not os.path.exists(PERMISSIONS_FILE):
@@ -67,7 +67,7 @@ def init_files():
             })
         pd.DataFrame(default_perms).to_csv(PERMISSIONS_FILE, index=False, encoding='utf-8-sig')
     else:
-        # إذا كان ملف الصلاحيات موجوداً، نضمن فقط إضافة الأسطر الجديدة دون مسح القديم
+        # تحديث ذكي: إذا كان ملف الصلاحيات موجوداً، ندمج الأسطر الجديدة فقط دون مسح الإعدادات والبيانات القديمة
         existing_perms = pd.read_csv(PERMISSIONS_FILE)
         missing_pages = [p for p in all_pages if p not in existing_perms["اسم الصفحة"].values]
         if missing_pages:
@@ -167,7 +167,7 @@ else:
         st.session_state.auth = False
         st.rerun()
 
-    # قراءة البيانات بشكل فوري ومحدث
+    # قراءة البيانات بشكل فوري ومحدث لضمان استقرار القيم القديمة والجديدة
     inv_df = pd.read_csv(INVENTORY_FILE, dtype={"كود الصنف": str})
     sales_df = pd.read_csv(SALES_FILE, dtype={"رقم الفاتورة": str, "الصنف": str})
     purchases_df = pd.read_csv(PURCHASES_FILE, dtype={"رقم الفاتورة": str})
@@ -335,9 +335,9 @@ else:
                 selected_inv_id = st.selectbox("اختر رقم الفاتورة للمراجعة أو التعديل/الحذف", filtered_sales['رقم الفاتورة'].unique())
                 f_row = sales_df[sales_df['رقم الفاتورة'] == selected_inv_id].iloc[0]
                 
-                # إظهار أزرار التعديل والحذف فقط لمن يملك الصلاحية المظهرة من المدير
                 col_actions1, col_actions2 = st.columns(2)
                 
+                # ربط الزر بإظهار/إخفاء الصلاحيات للرتبة الحالية
                 if "✏️ تعديل الفواتير السابقة" in allowed_actions:
                     with col_actions1:
                         with st.expander("✏️ تعديل بيانات هذه الفاتورة"):
@@ -353,10 +353,10 @@ else:
                                 st.success("🎉 تم تعديل الفاتورة بنجاح وثبات باقي البيانات!")
                                 st.rerun()
                                 
+                # ربط زر الحذف بإظهار/إخفاء الصلاحيات للرتبة الحالية
                 if "❌ حذف الفواتير السابقة" in allowed_actions:
                     with col_actions2:
                         if st.button("❌ حذف هذه الفاتورة نهائياً وإرجاع بضاعتها للمخزن", use_container_width=True):
-                            # إرجاع الكمية للمخزن أولاً لضمان دقة الرصيد
                             match_item = f_row['الصنف']
                             return_qty = int(f_row['الكمية'])
                             if match_item in inv_df['اسم الصنف'].values:
@@ -364,7 +364,6 @@ else:
                                 inv_df.at[s_idx, 'الكمية'] = int(inv_df.at[s_idx, 'الكمية']) + return_qty
                                 inv_df.to_csv(INVENTORY_FILE, index=False, encoding='utf-8-sig')
                             
-                            # حذف الفاتورة
                             sales_df = sales_df[sales_df['رقم الفاتورة'] != selected_inv_id]
                             sales_df.to_csv(SALES_FILE, index=False, encoding='utf-8-sig')
                             st.success("🔥 تم حذف الفاتورة وإرجاع الكمية للمخزن بنجاح!")
