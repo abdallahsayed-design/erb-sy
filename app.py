@@ -750,3 +750,6 @@ else:
                 updated_settings.to_csv(SETTINGS_FILE, index=False, encoding='utf-8-sig')
                 st.success("🚀 تم تحديث بيانات الفاتورة بنجاح!")
                 st.rerun()
+
+if "إدارة الأصناف والمخزن" in choice:
+# تم توحيدها تماماً مع المسمى الموجود في قائمة الصلاحيات الجانبية
