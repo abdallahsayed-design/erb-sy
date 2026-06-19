@@ -161,7 +161,6 @@ def generate_triple_invoice_html(inv_id, datetime_str, client_name, phone, addre
     html_content = f"""
     <div class="triple-print-wrapper">
         <style>
-            /* تم تعديل الخط ليعمل محلياً بدون إنترنت بالاعتماد على خطوط الجهاز الافتراضية المنسقة للغة العربية */
             @page {{ size: A5 portrait; margin: 0; }}
             @media print {{
                 body {{ direction: rtl; background: #fff; color: #000; padding: 0; margin: 0; }}
@@ -544,28 +543,21 @@ else:
                 collect_date = str(cc3.date_input("تاريخ التحصيل المستهدف"))
             
             st.markdown("### 🛒 إضافة المنتجات إلى السلة")
-            c5, c6, c6_price, c7 = st.columns(4) # تم تحويل الأعمدة إلى 4 لإدراج حقل السعر المخصص
+            c5, c6, c7 = st.columns(3)
             selected_item_code = c5.selectbox("اختر المنتج بالكود", inv_df['كود الصنف'].values, format_func=safe_item_format)
             qty = c6.number_input("الكمية المطلوبة", min_value=1, step=1)
             
-            # جلب البند الحالي لعرض السعر الافتراضي وتعديله
+            discount = 0.0
+            if st.session_state.role in ["مدير", "مشرف"]:
+                discount = c7.number_input("نسبة الخصم الممنوحة (%)", min_value=0.0, max_value=100.0, step=0.5)
+            else: c7.write("🔒 *صلاحية الخصم مغلقة للموظفين*")
+            
             matching_items = inv_df[inv_df['كود الصنف'] == selected_item_code]
             if matching_items.empty:
                 st.error("⚠️ خطأ حرج: البند المحدد غير متوفر بالمخزون الحالي.")
             else:
                 item_row = matching_items.iloc[0]
-                default_sale_price = float(item_row['سعر البيع']) if 'سعر البيع' in item_row else 0.0
-                
-                # [ميزة مضافة]: حقل تعديل سعر البيع يدوياً قبل الإضافة للسلة
-                custom_sale_price = c6_price.number_input("سعر البيع المعتمد للقطعة", value=default_sale_price, min_value=0.0, step=1.0)
-                
-                discount = 0.0
-                if st.session_state.role in ["مدير", "مشرف"]:
-                    discount = c7.number_input("نسبة الخصم الممنوحة (%)", min_value=0.0, max_value=100.0, step=0.5)
-                else: c7.write("🔒 *صلاحية الخصم مغلقة للموظفين*")
-                
-                # حساب الإجماليات والربحية بناءً على السعر الجديد المخصص
-                subtotal = custom_sale_price * qty
+                subtotal = float(item_row['سعر البيع']) * qty
                 discount_amount = subtotal * (discount / 100)
                 final_total = subtotal - discount_amount
                 
@@ -586,13 +578,13 @@ else:
                             "unit": item_row['نوع الوحدة'],
                             "warehouse_loc": item_row['موقع المخزن'],
                             "qty": qty,
-                            "price": custom_sale_price,  # حفظ السعر المعدل
+                            "price": float(item_row['سعر البيع']),
                             "discount": discount,
                             "final_total": final_total,
                             "cost_basis": cost_basis,
                             "profit_basis": profit_basis
                         })
-                        st.success(f"🎉 تم إضافة {item_row['اسم الصنف']} إلى السلة بالسعر المحدد!")
+                        st.success(f"🎉 تم إضافة {item_row['اسم الصنف']} إلى السلة!")
                         st.rerun()
             
             if st.session_state.cart:
